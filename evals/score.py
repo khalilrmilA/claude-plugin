@@ -105,10 +105,51 @@ def load_findings(obj):
     return out
 
 
-def score_fixture(expected, reported, no_scanners):
+# Which dependency scanner covers each ecosystem. osv-scanner covers all of
+# them; the others are ecosystem-specific. A scanner_dependent expected finding
+# is only graded when a scanner that could actually find it is installed.
+_ECOSYSTEM_SCANNER = {
+    "js": "npm", "python": "pip-audit", "php": "composer",
+    # maven/gradle/go/rust/ruby have no stand-alone scanner in the runner's
+    # probe list, so they are only reachable via osv-scanner.
+}
+
+
+def ecosystem_of(path):
+    p = path.lower()
+    base = p.rsplit("/", 1)[-1]
+    if base in ("package.json", "package-lock.json", "yarn.lock", "pnpm-lock.yaml"):
+        return "js"
+    if base in ("requirements.txt", "pipfile", "pipfile.lock", "pyproject.toml",
+                "poetry.lock") or base.startswith("requirements"):
+        return "python"
+    if base in ("composer.json", "composer.lock"):
+        return "php"
+    if base in ("pom.xml", "build.gradle", "build.gradle.kts"):
+        return "maven"
+    if base in ("go.mod", "go.sum"):
+        return "go"
+    if base in ("cargo.toml", "cargo.lock"):
+        return "rust"
+    if base in ("gemfile", "gemfile.lock"):
+        return "ruby"
+    return "unknown"
+
+
+def scanner_dependent_scorable(path, installed):
+    """True if a scanner that could find a dep issue in this file is installed."""
+    if "osv-scanner" in installed:
+        return True
+    eco = ecosystem_of(path)
+    needed = _ECOSYSTEM_SCANNER.get(eco)
+    return bool(needed and needed in installed)
+
+
+def score_fixture(expected, reported, installed):
     exp = expected.get("expected", [])
-    if no_scanners:
-        exp = [e for e in exp if not e.get("scanner_dependent")]
+    exp = [e for e in exp
+           if not e.get("scanner_dependent")
+           or scanner_dependent_scorable(e.get("file", ""), installed)]
     clean = {norm_path(c) for c in expected.get("clean_files", [])}
 
     matched_exp = []
@@ -166,11 +207,18 @@ def main():
     ap.add_argument("--actual", required=True)
     ap.add_argument("--out")
     ap.add_argument("--no-scanners", action="store_true",
-                    help="ignore scanner_dependent expected findings")
+                    help="no dependency scanner installed: ignore all scanner_dependent findings")
+    ap.add_argument("--installed-scanners", default="",
+                    help="comma list of installed dependency scanners (osv-scanner,npm,pip-audit,composer). "
+                         "A scanner_dependent finding is graded only when a scanner covering its ecosystem is present.")
     ap.add_argument("--recall-threshold", type=float, default=0.8)
     ap.add_argument("--category-floor", type=float, default=0.6)
     ap.add_argument("--fp-threshold", type=float, default=0.2)
     args = ap.parse_args()
+
+    installed = set() if args.no_scanners else {
+        s.strip() for s in args.installed_scanners.split(",") if s.strip()
+    }
 
     results = {}
     for ef in sorted(glob.glob(os.path.join(args.expected, "*.json"))):
@@ -191,7 +239,7 @@ def main():
                              "found": 0, "recall": 0.0, "reported": 0, "precision": 0.0,
                              "fp_clean": 0, "fp_clean_detail": [], "per_cat": {}, "misses": []}
             continue
-        results[name] = score_fixture(expected, reported, args.no_scanners)
+        results[name] = score_fixture(expected, reported, installed)
 
     # Aggregate.
     tot_exp = sum(r["expected"] for r in results.values())
@@ -226,9 +274,12 @@ def main():
     lines.append("| Worst category recall | %.0f%% | >= %.0f%% |" % (worst_cat * 100, args.category_floor * 100))
     lines.append("| Clean-file false positives | %.0f%% (%d/%d) | <= %.0f%% |" % (fp_rate * 100, tot_fp, tot_rep, args.fp_threshold * 100))
     lines.append("| Overall precision (informational) | %.0f%% | - |" % (overall_prec * 100))
-    if args.no_scanners:
+    if args.no_scanners or not installed:
         lines.append("")
-        lines.append("_Scanner-dependent findings (dependencies) excluded: no dependency scanner installed._")
+        lines.append("_Scanner-dependent dependency findings excluded: no dependency scanner installed._")
+    else:
+        lines.append("")
+        lines.append("_Installed dependency scanners: %s. Scanner-dependent findings are graded only for ecosystems these cover (osv-scanner covers all)._" % ", ".join(sorted(installed)))
     lines.append("")
     lines.append("## Per fixture")
     lines.append("")

@@ -47,18 +47,31 @@ PY=python3; command -v python3 >/dev/null 2>&1 || PY=python
 
 mkdir -p "$actual_dir" "$transcripts_dir"
 
-# Are any dependency scanners installed? Controls whether dep findings count.
-no_scanners_flag="--no-scanners"
+# Which dependency scanners are installed? Controls which ecosystems' dep
+# findings are graded (osv-scanner covers all; npm/pip-audit/composer are
+# ecosystem-specific). A JS tool must not make Maven/pip findings count.
+installed_scanners=""
 for t in osv-scanner npm pip-audit composer; do
-  if command -v "$t" >/dev/null 2>&1; then no_scanners_flag=""; break; fi
+  if command -v "$t" >/dev/null 2>&1; then
+    installed_scanners="${installed_scanners:+$installed_scanners,}$t"
+  fi
 done
+if [ -n "$installed_scanners" ]; then
+  score_scanner_args=(--installed-scanners "$installed_scanners")
+else
+  score_scanner_args=(--no-scanners)
+fi
 
 model_args=()
 [ -n "$model" ] && model_args=(--model "$model")
 
 echo "Plugin:   $plugin_dir"
 echo "Results:  $out_dir"
-[ -n "$no_scanners_flag" ] && echo "Scanners: none installed -> dependency findings excluded from scoring"
+if [ -n "$installed_scanners" ]; then
+  echo "Scanners: $installed_scanners -> dep findings graded only for ecosystems these cover"
+else
+  echo "Scanners: none installed -> dependency findings excluded from scoring"
+fi
 echo ""
 
 for fx in "$fixtures_dir"/*/; do
@@ -109,7 +122,7 @@ done
 if [ "$do_score" = "true" ]; then
   echo ""
   "$PY" "$here/score.py" --expected "$here/expected" --actual "$actual_dir" \
-    --out "$out_dir/report.md" $no_scanners_flag
+    --out "$out_dir/report.md" "${score_scanner_args[@]}"
   rc=$?
   echo ""
   echo "Report: $out_dir/report.md"

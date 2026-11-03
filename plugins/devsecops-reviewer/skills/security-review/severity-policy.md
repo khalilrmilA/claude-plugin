@@ -34,12 +34,19 @@ earns, and say in `attack_scenario` why this instance is real):
 - **Generic "missing input validation"** with no concrete dangerous sink behind
   it. Validation matters only where the unvalidated value reaches injection,
   auth, path, or logic sinks — report *that*, not the missing validation.
-- **Open redirects** on their own — `low`/`info` unless chained into credential
-  theft, an OAuth token leak, or an SSRF.
 - **Self-XSS**, best-practice headers on an API with no browser surface,
   verbose errors in a local-only/dev-only path, and `TODO`/commented-out code.
-- **Theoretical weaknesses with no attacker** (e.g. a weak hash used purely as a
-  non-security cache key, randomness used for a non-security value).
+- **Weaknesses with a genuinely non-security use** — a weak hash used purely as a
+  non-security cache key, randomness used for a cosmetic (non-security) value.
+  This is about the *use*, not the *codebase*: do **not** treat a real security
+  bug as "theoretical" just because the surrounding repo is a stub, a skeleton,
+  or lacks the consumer/backend that completes the exploit. Rate such a bug at
+  its inherent severity as deployed (see the verifier's calibration rule).
+
+An **open redirect** where an attacker controls the destination is a real finding
+(default **medium**, phishing/token-leak); only rate it `low`/`info` when the
+redirect target is same-origin-restricted or not attacker-controlled. It is *not*
+on this exclusion list.
 
 This is a floor, not a gag: a real, reachable bug in any of these areas is still
 a finding. The finding-verifier pass applies this list when ruling on candidate

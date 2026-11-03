@@ -125,3 +125,43 @@ pass active (to quantify the precision gain). The logic is additive and
 fail-safe (an empty candidate list skips the verifier; a missing config is
 ignored), so it cannot lower recall; measuring the FP reduction is the next step
 if desired.
+
+## Iteration 5 — verifier calibration + per-ecosystem dep scoring (2026-11-03)
+
+First full eval run WITH the new finding-verifier pass scored 79% recall (FAIL) —
+but detection was perfect; the verifier was **downgrading** confirmed bugs
+(nosqli/idor/mass-assignment/deserialization high->medium, a committed JWT secret
+critical->low) by judging them against each fixture's skeleton ("stub DB", "no
+consumer in this repo", "value looks example-shaped"). Clean-file FP stayed 0%,
+so it was severity-capping real bugs, not inventing false ones.
+
+Fixes:
+1. **finding-verifier calibration** — added an explicit rule: severity is the
+   vulnerability's inherent risk *as deployed in production*, not whether a full
+   exploit can be shown inside a thin repo. Downgrade only for a real mitigating
+   control on the exploit path; never for stub/skeleton code, a missing
+   consumer/backend, unobservable blast radius, or a committed secret that isn't
+   read here. Keep-vs-drop (is it real) separated from severity (how bad).
+2. **open-redirect policy** — removed the over-aggressive blanket downgrade in
+   severity-policy's exclusion list; an attacker-controlled redirect is medium by
+   default (matches the policy table).
+3. **per-ecosystem scanner scoring** (score.py + run-evals.sh) — the old gate was
+   all-or-nothing: `npm` being installed made the scorer grade Maven/pip
+   `scanner_dependent` findings that only osv-scanner/pip-audit could find. Now a
+   scanner_dependent finding is graded only when a scanner covering *its*
+   ecosystem is installed (osv-scanner covers all). Honors the existing
+   `scanner_dependent: true` marks correctly. (Future refinement promised in
+   iteration 2.)
+
+Result (re-run `20261103T120927Z`, re-scored with per-ecosystem gating):
+**PASS — overall recall 98% (40/41), worst category 75%, clean-file FP 0%,
+precision 67%.** Per fixture: node-express 100%, php-app 100%, python-flask 100%,
+java-spring 89%. Before->after of this iteration: 79% -> 98% recall, FP 0% both.
+Precision improved vs the pre-verifier baseline because the verifier merges
+duplicates and right-sizes severities.
+
+Residual (1 miss): java `jwt-secret` whose literal value is `change-me` — the
+verifier rated it low as a placeholder; the fixture expects medium (a committed
+default signing key is a predictable-key weakness). Documented judgment call; the
+suite passes without chasing it. Real-app re-runs (NodeGoat/clean app) with the
+verifier active are the remaining optional validation.

@@ -63,6 +63,37 @@ When you are genuinely unsure after reading the code, **keep** the finding but
 set `verdict: "keep"` with `confidence_out: "suspected"` and a question — do not
 drop something you merely couldn't confirm.
 
+## Severity is inherent risk *as deployed* — do not downgrade for a thin codebase
+
+This is the rule verifiers get wrong most often. Severity reflects what the
+vulnerability does **when this code runs in production as written**, not whether
+you can demonstrate a full end-to-end exploit inside the repository in front of
+you. You must **not** drop or downgrade a confirmed dangerous pattern merely
+because:
+
+- the surrounding code is a **skeleton, stub, demo, boilerplate or fixture** (a
+  stubbed/in-memory DB still becomes a real DB in production — a confirmed SQL/
+  NoSQL injection, IDOR or mass-assignment stays **high**);
+- **no downstream consumer, real backend, caller or route exists in this repo
+  yet** ("nothing reads this today" is not a control — the next commit will);
+- the impact isn't **observable** without the rest of the system;
+- a **secret or credential** committed to source isn't referenced by code here —
+  a hardcoded/committed secret is exposed to everyone with repo access
+  regardless of whether this repo consumes it; rate it on the secret's power
+  (prod credential = critical/high), and only treat it as a placeholder when its
+  **value** is clearly fake (`changeme`, `example`, `xxxx`, `<...>`), not because
+  usage is absent.
+
+You may lower severity (or drop) only for a **real mitigating control present on
+the exploit path** — parameterized query, output encoding/auto-escaping, a real
+allowlist/validation, an authentication/ownership check actually enforced,
+framework protection on by default, or the code being genuinely dead/test-only —
+or when the flagged value is provably a non-security placeholder. "I couldn't see
+the blast radius in this repo" is a reason to **keep** at inherent severity with
+a note, never to downgrade. Separate the two questions: *is it real* (keep vs.
+drop) and *how bad as deployed* (severity) — a thin repo answers neither in the
+vulnerability's favour.
+
 ## Output
 
 End your reply with exactly one fenced `json` block. One entry per candidate
