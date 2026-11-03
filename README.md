@@ -117,14 +117,14 @@ false-positive-filtering instructions.
 In a Claude Code session:
 
 ```
-/plugin marketplace add your-org/devsecops-tools      # GitHub owner/repo of this marketplace
+/plugin marketplace add khalilrmilA/claude-plugin      # GitHub owner/repo of this marketplace
 /plugin install devsecops-reviewer@devsecops-tools
 ```
 
 Or from your shell:
 
 ```bash
-claude plugin marketplace add your-org/devsecops-tools
+claude plugin marketplace add khalilrmilA/claude-plugin
 claude plugin install devsecops-reviewer@devsecops-tools
 ```
 
@@ -141,7 +141,7 @@ Then, in a project, just ask Claude to review your changes, or run
 From the repo, once, committed to the repo's settings:
 
 ```bash
-claude plugin marketplace add your-org/devsecops-tools --scope project
+claude plugin marketplace add khalilrmilA/claude-plugin --scope project
 claude plugin install devsecops-reviewer@devsecops-tools --scope project
 ```
 
@@ -155,7 +155,7 @@ devsecops-reviewer@devsecops-tools --scope project`). Example
 ```json
 {
   "extraKnownMarketplaces": {
-    "devsecops-tools": { "source": { "source": "github", "repo": "your-org/devsecops-tools" } }
+    "devsecops-tools": { "source": { "source": "github", "repo": "khalilrmilA/claude-plugin" } }
   },
   "enabledPlugins": { "devsecops-reviewer@devsecops-tools": true }
 }
@@ -171,7 +171,7 @@ It installs and enables the plugin on every machine and can't be overridden:
 {
   "extraKnownMarketplaces": {
     "devsecops-tools": {
-      "source": { "source": "github", "repo": "your-org/devsecops-tools" },
+      "source": { "source": "github", "repo": "khalilrmilA/claude-plugin" },
       "autoUpdate": true
     }
   },
@@ -187,8 +187,11 @@ add `strictKnownMarketplaces` and `disableSideloadFlags` (see the org docs).
 
 ### Develop / try locally without a marketplace
 
+Clone the repo and point Claude Code at the plugin directory:
+
 ```bash
-claude --plugin-dir /path/to/devsecops-tools/plugins/devsecops-reviewer
+git clone https://github.com/khalilrmilA/claude-plugin.git
+claude --plugin-dir ./claude-plugin/plugins/devsecops-reviewer
 ```
 
 ## Install the scanners
@@ -322,7 +325,7 @@ no category below 60%, clean-file false positives ≤ 20%. See
 ## Repository layout
 
 ```
-devsecops-tools/                      # this repo == the marketplace
+claude-plugin/                        # this repo == the marketplace (name: devsecops-tools)
 ├── .claude-plugin/marketplace.json
 ├── plugins/devsecops-reviewer/       # the plugin (what gets installed)
 │   ├── .claude-plugin/plugin.json
