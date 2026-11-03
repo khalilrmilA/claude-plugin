@@ -1,0 +1,16 @@
+{
+  "name": "devsecops-tools",
+  "description": "Internal security tooling for Claude Code: pre-push security review and push gate.",
+  "owner": {
+    "name": "DevSecOps Team"
+  },
+  "plugins": [
+    {
+      "name": "devsecops-reviewer",
+      "source": "./plugins/devsecops-reviewer",
+      "description": "Reviews your changes for exploitable vulnerabilities before you push, explains them, proposes fixes, and gates git push on a passing review.",
+      "category": "security",
+      "tags": ["security", "devsecops", "pre-push"]
+    }
+  ]
+}

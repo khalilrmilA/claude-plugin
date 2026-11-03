@@ -1,0 +1,64 @@
+{
+  "description": "devsecops-reviewer: block git push without a passing review stamp, and log review/agent lifecycle events",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "if": "Bash(git *)",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/check-review-stamp.sh\" --claude-hook",
+            "timeout": 30,
+            "statusMessage": "devsecops-reviewer: checking security review stamp"
+          }
+        ]
+      },
+      {
+        "matcher": "Skill",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/hook-log.sh\"",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "UserPromptExpansion": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/hook-log.sh\"",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "matcher": "devsecops-reviewer:.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/hook-log.sh\"",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "matcher": "devsecops-reviewer:.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/hook-log.sh\"",
+            "timeout": 15
+          }
+        ]
+      }
+    ]
+  }
+}

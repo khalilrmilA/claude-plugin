@@ -1,0 +1,3 @@
+# Fixture line numbers are referenced by evals/expected/*.json, so pin LF
+# everywhere to keep them stable across OSes and checkouts.
+* text eol=lf

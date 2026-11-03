@@ -1,0 +1,8 @@
+# Shell scripts and git hooks must keep LF line endings, or bash fails on
+# Windows checkouts with core.autocrlf=true ("$'\r': command not found").
+*.sh                text eol=lf
+*.py                text eol=lf
+*.md                text eol=lf
+*.json              text eol=lf
+plugins/devsecops-reviewer/bin/*        text eol=lf
+plugins/devsecops-reviewer/git-hooks/*  text eol=lf

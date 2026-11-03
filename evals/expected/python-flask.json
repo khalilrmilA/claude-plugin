@@ -1,0 +1,18 @@
+{
+  "fixture": "python-flask",
+  "clean_files": ["safe.py"],
+  "expected": [
+    { "name": "sqli-search",            "file": "app.py", "line_start": 26, "line_end": 28, "category": "sqli",               "min_severity": "high",     "notes": "LIKE with string concatenation" },
+    { "name": "command-injection-ping", "file": "app.py", "line_start": 35, "line_end": 35, "category": "command-injection",  "min_severity": "high",     "notes": "subprocess shell=True with input" },
+    { "name": "ssti-render",            "file": "app.py", "line_start": 42, "line_end": 42, "category": "template-injection", "min_severity": "high",     "notes": "render_template_string on input" },
+    { "name": "path-traversal-download","file": "app.py", "line_start": 48, "line_end": 48, "category": "path-traversal",     "min_severity": "high",     "notes": "send_file with joined user path" },
+    { "name": "deser-pickle",           "file": "app.py", "line_start": 54, "line_end": 54, "category": "deserialization",    "min_severity": "high",     "notes": "pickle.loads on request data" },
+    { "name": "open-redirect-go",       "file": "app.py", "line_start": 61, "line_end": 61, "category": "open-redirect",      "min_severity": "medium",   "notes": "redirect to user-supplied next" },
+    { "name": "sensitive-logging-pw",   "file": "app.py", "line_start": 68, "line_end": 68, "category": "sensitive-logging",  "min_severity": "medium",   "notes": "password written to logs" },
+    { "name": "weak-pw-hash-md5",       "file": "app.py", "line_start": 69, "line_end": 69, "category": "password-storage",   "min_severity": "high",     "notes": "md5 password hashing" },
+    { "name": "secret-key-hardcoded",   "file": "app.py", "line_start": 13, "line_end": 13, "category": "secrets",            "min_severity": "high",     "notes": "hardcoded Flask secret key" },
+    { "name": "debug-mode",             "file": "app.py", "line_start": 12, "line_end": 12, "category": "debug-mode",         "min_severity": "medium",   "notes": "DEBUG=True / app.run(debug=True)" },
+    { "name": "authz-admin-users",      "file": "app.py", "line_start": 77, "line_end": 81, "category": "authz",              "min_severity": "high",     "notes": "/admin/users has no auth/role check" },
+    { "name": "vuln-deps",              "file": "requirements.txt", "line_start": 1, "line_end": 4, "category": "vulnerable-dependency", "min_severity": "medium", "notes": "flask/jinja2/pyyaml/requests pinned to versions with known CVEs", "scanner_dependent": true }
+  ]
+}

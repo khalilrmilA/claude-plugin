@@ -1,0 +1,17 @@
+{
+  "fixture": "php-app",
+  "clean_files": ["safe.php"],
+  "expected": [
+    { "name": "sqli-user",            "file": "index.php",  "line_start": 10, "line_end": 10, "category": "sqli",                "min_severity": "high",     "notes": "id concatenated into query" },
+    { "name": "lfi-page",             "file": "index.php",  "line_start": 16, "line_end": 17, "category": "path-traversal",      "min_severity": "high",     "notes": "include of user-controlled path (LFI)" },
+    { "name": "xss-greet",            "file": "index.php",  "line_start": 22, "line_end": 22, "category": "xss",                 "min_severity": "medium",   "notes": "echo of unescaped input (reflected = medium per severity-policy.md)" },
+    { "name": "command-injection",    "file": "index.php",  "line_start": 27, "line_end": 27, "category": "command-injection",   "min_severity": "high",     "notes": "system() with concatenated input" },
+    { "name": "deser-unserialize",    "file": "index.php",  "line_start": 31, "line_end": 31, "category": "deserialization",     "min_severity": "high",     "notes": "unserialize of a cookie (object injection)" },
+    { "name": "weak-pw-hash-md5",     "file": "index.php",  "line_start": 38, "line_end": 39, "category": "password-storage",    "min_severity": "high",     "notes": "md5 password + SQLi in login" },
+    { "name": "sqli-login",           "file": "index.php",  "line_start": 39, "line_end": 39, "category": "sqli",                "min_severity": "high",     "notes": "login query built from input" },
+    { "name": "insecure-upload",      "file": "upload.php", "line_start": 5,  "line_end": 6,  "category": "file-upload",         "min_severity": "high",     "notes": "client filename, no checks, web-served dir" },
+    { "name": "secret-db-pass",       "file": "config.php", "line_start": 6,  "line_end": 6,  "category": "secrets",             "min_severity": "high",     "notes": "hardcoded production DB password" },
+    { "name": "default-credentials",  "file": "config.php", "line_start": 9,  "line_end": 10, "category": "default-credentials", "min_severity": "low",      "notes": "admin/admin default account (defined but unused in fixture -> low is acceptable)" },
+    { "name": "debug-display-errors", "file": "config.php", "line_start": 12, "line_end": 13, "category": "debug-mode",          "min_severity": "medium",   "notes": "display_errors on in config" }
+  ]
+}

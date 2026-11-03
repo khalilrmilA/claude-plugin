@@ -1,0 +1,13 @@
+{
+  "name": "vuln-express-fixture",
+  "version": "0.0.0",
+  "private": true,
+  "description": "DELIBERATELY VULNERABLE TEST FIXTURE - DO NOT DEPLOY",
+  "dependencies": {
+    "express": "4.17.1",
+    "jsonwebtoken": "8.5.1",
+    "lodash": "4.17.11",
+    "cors": "2.8.5",
+    "expres-session": "1.0.0"
+  }
+}

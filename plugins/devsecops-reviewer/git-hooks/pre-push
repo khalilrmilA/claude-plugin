@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+# devsecops-reviewer pre-push hook (installed by scripts/install-git-hook.sh)
+#
+# Blocks a push when the pushed changes have no passing security-review stamp.
+# Mode, from env DSR_PREPUSH_MODE or `git config devsecops.prePushMode`:
+#   check     (default) check the stamp; if missing, tell the developer to run
+#             /devsecops-reviewer:security-review in Claude Code
+#   headless  if the stamp is missing or stale, run the review non-interactively
+#             with `claude -p`, then check again
+#   warn      print the message but never block (for a gentle rollout)
+#
+# An existing pre-push hook is kept as pre-push.chained and runs first.
+set -u
+
+remote_name=${1:-}
+remote_url=${2:-}
+hook_dir="$(cd "$(dirname "$0")" && pwd)"
+support="$hook_dir/devsecops-reviewer"
+check="$support/scripts/check-review-stamp.sh"
+refs=$(cat)
+
+if [ -f "$hook_dir/pre-push.chained" ]; then
+  printf '%s\n' "$refs" | "$hook_dir/pre-push.chained" "$@" || exit $?
+fi
+
+if [ ! -f "$check" ]; then
+  echo "devsecops-reviewer: hook support files are missing in $support." >&2
+  echo "Re-install with: bash <plugin>/scripts/install-git-hook.sh" >&2
+  exit 1
+fi
+
+mode=${DSR_PREPUSH_MODE:-$(git config --get devsecops.prePushMode 2>/dev/null || echo check)}
+
+if printf '%s\n' "$refs" | bash "$check" --pre-push "$remote_name" "$remote_url"; then
+  exit 0
+fi
+
+case "$mode" in
+  warn)
+    echo "devsecops-reviewer: warn mode, push allowed anyway." >&2
+    exit 0
+    ;;
+  headless)
+    if ! command -v claude >/dev/null 2>&1; then
+      echo "devsecops-reviewer: headless mode needs the 'claude' CLI on PATH." >&2
+      exit 1
+    fi
+    echo "devsecops-reviewer: running the security review headlessly (claude -p)..." >&2
+    plugin_args=()
+    [ -n "${DSR_PLUGIN_DIR:-}" ] && plugin_args=(--plugin-dir "$DSR_PLUGIN_DIR")
+    # stdin is redirected: git feeds this hook the ref list on stdin, and
+    # claude -p would otherwise read it as part of the prompt.
+    claude -p "/devsecops-reviewer:security-review --non-interactive" \
+      "${plugin_args[@]+"${plugin_args[@]}"}" \
+      --permission-mode acceptEdits \
+      --allowedTools "Bash(devsecops-review *),Bash(bash *),Bash(git diff *),Bash(git log *),Bash(git status *),Bash(git show *),Bash(git rev-parse *),Bash(git ls-files *),Bash(git merge-base *),Bash(git blame *),Read,Grep,Glob,Write,Agent" \
+      --disallowedTools "Bash(git push *),Bash(git commit *),Bash(git reset *),Bash(git checkout *)" \
+      </dev/null >&2 || echo "devsecops-reviewer: headless review exited with an error." >&2
+    if printf '%s\n' "$refs" | bash "$check" --pre-push "$remote_name" "$remote_url"; then
+      exit 0
+    fi
+    echo "devsecops-reviewer: see the report in .security-review/reports/ for what blocks the push." >&2
+    exit 1
+    ;;
+  *)
+    exit 1
+    ;;
+esac

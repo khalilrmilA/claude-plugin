@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+# devsecops-review: single entry point to the plugin scripts.
+# Claude Code puts this plugin's bin/ on the Bash tool's PATH while the plugin
+# is enabled, so the review skill can run "devsecops-review <command>" with one
+# stable permission rule, wherever the plugin is installed.
+#
+#   devsecops-review scope [--all|--staged|--since <ref>]   compute review scope
+#   devsecops-review stack                                  detect languages/frameworks
+#   devsecops-review scan [--all]                           run installed scanners
+#   devsecops-review deep-secrets [--tree|--history|--all]  deep secret sweep (tree + git history)
+#   devsecops-review log <event> [k=v ...]                  append a telemetry event
+#   devsecops-review finalize --verdict <V> [...]           write stamp + log verdict
+#   devsecops-review check                                  check the push gate for HEAD
+#   devsecops-review install-hook [--mode M]                install git pre-push hook
+#   devsecops-review git-check                              diagnose git availability
+set -u
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+S="$ROOT/scripts"
+cmd=${1:-help}
+[ $# -gt 0 ] && shift
+case "$cmd" in
+  scope)        exec bash "$S/get-scope.sh" "$@";;
+  stack)        exec bash "$S/detect-stack.sh" "$@";;
+  scan)         exec bash "$S/run-scanners.sh" "$@";;
+  deep-secrets) exec bash "$S/deep-secret-scan.sh" "$@";;
+  log)          exec bash "$S/log-event.sh" "$@";;
+  finalize)     exec bash "$S/finalize-review.sh" "$@";;
+  check)        exec bash "$S/check-review-stamp.sh" "$@";;
+  install-hook) exec bash "$S/install-git-hook.sh" "$@";;
+  git-check)    exec bash "$S/git-check.sh" "$@";;
+  root)         echo "$ROOT";;
+  help|-h|--help) awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "$0";;
+  *) echo "devsecops-review: unknown command '$cmd' (try: devsecops-review help)" >&2; exit 2;;
+esac

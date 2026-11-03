@@ -1,0 +1,6 @@
+.security-review/
+evals/results/*
+!evals/results/.gitkeep
+evals/.work/
+__pycache__/
+*.pyc

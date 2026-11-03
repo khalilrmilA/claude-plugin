@@ -1,0 +1,16 @@
+{
+  "fixture": "java-spring",
+  "clean_files": ["src/main/java/com/example/demo/SafeController.java"],
+  "expected": [
+    { "name": "sqli-users",        "file": "src/main/java/com/example/demo/ApiController.java", "line_start": 23, "line_end": 25, "category": "sqli",            "min_severity": "high",   "notes": "name concatenated into SQL" },
+    { "name": "path-traversal",    "file": "src/main/java/com/example/demo/ApiController.java", "line_start": 30, "line_end": 31, "category": "path-traversal",  "min_severity": "high",   "notes": "readAllBytes of joined user path" },
+    { "name": "ssrf-fetch",        "file": "src/main/java/com/example/demo/ApiController.java", "line_start": 35, "line_end": 39, "category": "ssrf",            "min_severity": "high",   "notes": "fetch of user-supplied URL" },
+    { "name": "xxe-xml",           "file": "src/main/java/com/example/demo/ApiController.java", "line_start": 43, "line_end": 47, "category": "xxe",             "min_severity": "high",   "notes": "DocumentBuilderFactory without disabling entities" },
+    { "name": "deser-objectinput", "file": "src/main/java/com/example/demo/ApiController.java", "line_start": 51, "line_end": 54, "category": "deserialization", "min_severity": "high",   "notes": "ObjectInputStream.readObject on untrusted bytes" },
+    { "name": "authz-delete-user", "file": "src/main/java/com/example/demo/ApiController.java", "line_start": 57, "line_end": 60, "category": "authz",           "min_severity": "high",   "notes": "DELETE endpoint with no authorization" },
+    { "name": "secret-db-pass",    "file": "src/main/resources/application.properties",         "line_start": 4,  "line_end": 4,  "category": "secrets",         "min_severity": "high",   "notes": "hardcoded DB password in properties" },
+    { "name": "actuator-exposed",  "file": "src/main/resources/application.properties",         "line_start": 5,  "line_end": 6,  "category": "misconfiguration","min_severity": "medium", "notes": "all actuator endpoints exposed + stacktraces" },
+    { "name": "jwt-secret",        "file": "src/main/resources/application.properties",         "line_start": 7,  "line_end": 7,  "category": "secrets",         "min_severity": "medium", "notes": "shared/placeholder JWT secret committed" },
+    { "name": "vuln-deps",         "file": "pom.xml", "line_start": 10, "line_end": 18, "category": "vulnerable-dependency", "min_severity": "high", "notes": "spring-boot 2.5.3 + jackson-databind 2.9.8 known CVEs", "scanner_dependent": true }
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "fixture": "node-express",
+  "clean_files": ["safe.js", "db.js"],
+  "expected": [
+    { "name": "cors-star-credentials", "file": "server.js", "line_start": 9,  "line_end": 9,  "category": "cors",              "min_severity": "medium", "notes": "origin:true with credentials reflects any origin" },
+    { "name": "xss-greet",             "file": "server.js", "line_start": 13, "line_end": 15, "category": "xss",               "min_severity": "medium", "notes": "reflected XSS in HTML response (reflected = medium per severity-policy.md)" },
+    { "name": "nosqli-login",          "file": "server.js", "line_start": 20, "line_end": 20, "category": "nosqli",            "min_severity": "high",   "notes": "request body used as Mongo filter" },
+    { "name": "command-injection-dns", "file": "server.js", "line_start": 27, "line_end": 27, "category": "command-injection", "min_severity": "high",   "notes": "exec with concatenated input" },
+    { "name": "jwt-not-verified",      "file": "server.js", "line_start": 31, "line_end": 34, "category": "session-jwt",       "min_severity": "high",   "notes": "jwt.decode instead of verify" },
+    { "name": "idor-orders",           "file": "server.js", "line_start": 38, "line_end": 40, "category": "idor",              "min_severity": "high",   "notes": "order fetched by id without ownership check" },
+    { "name": "mass-assignment-users", "file": "server.js", "line_start": 43, "line_end": 45, "category": "mass-assignment",   "min_severity": "high",   "notes": "whole body saved, role included -> privilege escalation" },
+    { "name": "open-redirect-out",     "file": "server.js", "line_start": 48, "line_end": 48, "category": "open-redirect",     "min_severity": "medium", "notes": "redirect to user-supplied url" },
+    { "name": "logic-checkout-price",  "file": "server.js", "line_start": 51, "line_end": 56, "category": "business-logic",    "min_severity": "high",   "notes": "client price/quantity trusted; negative quantity" },
+    { "name": "vuln-deps-and-typosquat", "file": "package.json", "line_start": 7, "line_end": 11, "category": "vulnerable-dependency", "min_severity": "medium", "notes": "lodash 4.17.11 (proto pollution) + 'expres-session' typosquat", "scanner_dependent": true }
+  ]
+}
