@@ -63,6 +63,12 @@ When you are genuinely unsure after reading the code, **keep** the finding but
 set `verdict: "keep"` with `confidence_out: "suspected"` and a question — do not
 drop something you merely couldn't confirm.
 
+When confirming a finding requires a hosted-runner, registry, signing-service,
+cloud-account policy, model/provider, or deployment fact not visible in source,
+set `verdict: "keep"` with `confidence_out: "needs_validation"` and state the
+exact missing fact in `question`. This is distinct from `suspected`: you believe
+the path exists but cannot close the loop without an owner-observable check.
+
 ## Severity is inherent risk *as deployed* — do not downgrade for a thin codebase
 
 This is the rule verifiers get wrong most often. Severity reflects what the
@@ -108,7 +114,7 @@ finding, same ids. No prose finding objects — just the rulings.
       "verdict": "keep | drop | adjust",
       "exploit_path": "Concrete source->sink path and trigger input, or why none exists.",
       "severity_out": "critical|high|medium|low|info",
-      "confidence_out": "confirmed|likely|suspected",
+      "confidence_out": "confirmed|likely|suspected|needs_validation",
       "reason": "Why you ruled this way, citing the code you re-read.",
       "question": ""
     }
@@ -120,7 +126,9 @@ finding, same ids. No prose finding objects — just the rulings.
 ```
 
 - `keep`: real and exploitable as described. `severity_out`/`confidence_out`
-  repeat or refine the input values.
+  repeat or refine the input values. Use `confidence_out: "needs_validation"` when
+  the path exists but a deployment/provider fact outside source is required to
+  close the loop — always include the exact missing fact in `question`.
 - `adjust`: real but mis-rated; give the corrected `severity_out`/`confidence_out`.
 - `drop`: false positive, fully mitigated, excluded noise, or duplicate; `reason`
   must say which and cite the control or path that rules it out.

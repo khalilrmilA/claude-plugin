@@ -5,6 +5,20 @@
 Rate by what a realistic attacker gains, given who can reach the code
 (unauthenticated internet user, any logged-in user, admin only, local only).
 
+### Confidence levels
+
+| Confidence | Meaning |
+| :- | :- |
+| **confirmed** | Full source-traced path from attacker-controlled input to dangerous sink with no blocking control |
+| **likely** | Strong evidence; one gap in trace (e.g. dynamic dispatch) but no plausible mitigation |
+| **suspected** | Real concern but significant uncertainty — ask the developer a direct question |
+| **needs_validation** | Path probably exists but requires a deployment/provider/hosted-service fact not visible in source; state the exact missing fact |
+
+Use `needs_validation` for supply-chain, cloud-IaC, and AI/LLM findings that require
+branch-protection rules, CI runner trust, registry defaults, cloud account policy, model
+behavior, or live deployment observation to confirm. It is NOT a weaker `suspected` — it
+signals a specific owner-observable check that would resolve the finding.
+
 | Severity | Meaning | Examples |
 | :- | :- | :- |
 | **critical** | Remote, little or no precondition, leads to full compromise of data, accounts or the host | Unauthenticated SQL/command injection, RCE via deserialization, hardcoded production cloud/DB credential, authentication bypass, any user reaching admin functions |

@@ -33,21 +33,26 @@ It:
 5. Runs **deterministic scanners** that are installed (gitleaks, semgrep,
    dependency audits), scoped to your changes. Missing tools are reported, never
    fatal.
-6. Dispatches specialist **reviewer agents** (injection, auth, logic,
-   config/secrets, **crypto**, dependencies) — only the relevant ones.
-7. Merges and de-duplicates findings, drops scanner false positives the agents
+6. Builds a **coverage ledger** (`.security-review/coverage-ledger.md`) tracking
+   which surfaces (server code, CI/IaC, AI/LLM, etc.) are assigned to which agent,
+   so nothing silently falls through on large repos.
+7. Dispatches specialist **reviewer agents** (injection, auth, logic,
+   config/secrets, **crypto**, dependencies, **supply-chain/CI**, **cloud/IaC**,
+   **AI/LLM**) — only the relevant ones, in parallel.
+8. Merges and de-duplicates findings, drops scanner false positives the agents
    disproved, then runs a **verification pass** (`finding-verifier`) that tries
    to *disprove* every candidate and keeps only those with a concrete, reachable
    exploit path — the main precision control. Sorts by severity.
-8. Asks you **direct questions** for anything uncertain (e.g. "Is `/api/export`
-   meant to be public?").
-9. **Fix mode:** for each finding shows the attack, the vulnerable `file:line`,
-   and a proposed fix as a diff. You accept / reject (with reason) / edit.
-   Nothing is changed without your approval; fixes are re-checked after applying.
-10. Produces a **verdict** — PASS, PASS WITH WARNINGS, or BLOCKED.
-11. Writes a **stamp** (`.security-review/stamp.json`) and a **report**
+9. Asks you **direct questions** for anything uncertain (e.g. "Is `/api/export`
+   meant to be public?"). Findings that require a deployment/provider fact to
+   confirm are flagged `needs_validation` with the exact missing fact.
+10. **Fix mode:** for each finding shows the attack, the vulnerable `file:line`,
+    and a proposed fix as a diff. You accept / reject (with reason) / edit.
+    Nothing is changed without your approval; fixes are re-checked after applying.
+11. Produces a **verdict** — PASS, PASS WITH WARNINGS, or BLOCKED.
+12. Writes a **stamp** (`.security-review/stamp.json`) and a **report**
     (`.security-review/reports/<id>.md`).
-12. The **push gate** blocks `git push` until the pushed code matches a passing
+13. The **push gate** blocks `git push` until the pushed code matches a passing
     review.
 
 ### Vulnerability coverage
@@ -59,11 +64,29 @@ authorization, IDOR, privilege escalation, mass assignment, CSRF; JWT/session
 weaknesses; password storage; business-logic flaws, race conditions,
 client-side trust, missing server-side validation; secrets and default
 credentials; debug mode, permissive CORS, insecure cookies, missing security
-headers, risky Docker/K8s/IaC/CI; weak cryptography and insecure randomness;
-vulnerable/outdated dependencies and typosquatting; sensitive data in logs.
+headers; weak cryptography and insecure randomness; vulnerable/outdated
+dependencies and typosquatting; sensitive data in logs.
+
+**Supply-chain and CI/CD:** dependency namespace confusion, mutable build inputs,
+generated-source provenance gaps, build-context secret inclusion, untrusted code
+in privileged workflows (e.g. `pull_request_target`), workflow expression
+injection, CI cache/artifact trust mixing, automation identity overreach, release
+signing gaps, plugin trust expansion.
+
+**Cloud and IaC:** IAM/workload identity overreach, cross-account role confusion,
+unexpected service reachability, trusted-proxy bypass, container host-capability
+exposure, admission policy gaps, security-control precedence drift, secret
+exposure across workload boundaries, managed-storage policy confusion.
+
+**AI/LLM and agents:** indirect prompt injection via retrieved content,
+cross-session context bleed, persistent memory poisoning, prompt role/provenance
+confusion, tool-argument injection into dangerous sinks, excessive agency/
+confused-deputy authority, action-confirmation binding failures, unbounded
+delegated action loops, MCP sub-agent trust inheritance, MCP identity confusion,
+insecure model output rendering.
 
 Each finding maps to the **OWASP Top 10 (2021)** and a **CWE**, with a severity
-and a confidence (`confirmed` / `likely` / `suspected`).
+and a confidence (`confirmed` / `likely` / `suspected` / `needs_validation`).
 
 ### Extra skills you can run directly
 
@@ -225,6 +248,9 @@ reading-heavy work. Each reviewer agent has a default tier:
 | auth-reviewer | sonnet | high | authorization and IDOR reasoning |
 | injection-reviewer | sonnet | high | source→sink tracing across files |
 | crypto-reviewer | sonnet | high | primitives, keys, randomness, signatures |
+| supply-chain-reviewer | sonnet | high | CI workflow trust analysis, build-input tracing, release integrity |
+| cloud-reviewer | sonnet | high | IaC policy reasoning, IAM and container security |
+| ai-llm-reviewer | sonnet | high | LLM trust-boundary reasoning, MCP and tool-call security |
 | config-secrets-reviewer | haiku | medium | reading config, matching secret/misconfig patterns |
 | dependency-reviewer | haiku | low | manifest/version lookups |
 | finding-verifier | opus | high | adversarially disproving candidate findings — precision matters most |
@@ -286,8 +312,9 @@ credentials stripped), `branch`, `commit`, `developer` (git `user.email`),
 `host`, `plugin`, `plugin_version`, `session_id`, and an event-specific
 `details` object.
 
-Event types: `review_started`, `scope_detected`, `stack_detected`,
-`scanner_result`, `agent_started`, `agent_completed`, `finding_reported`,
+Event types: `review_started`, `config_loaded`, `scope_detected`,
+`stack_detected`, `scanner_result`, `agent_started`, `agent_completed`,
+`finding_reported`, `finding_verified`, `coverage_ledger_updated`,
 `question_asked`, `question_answered`, `finding_accepted`, `finding_rejected`
 (with reason), `fix_applied`, `fix_verified`, `verdict`, `block_overridden`
 (with reason), `push_blocked`, `push_allowed`, `review_error`.

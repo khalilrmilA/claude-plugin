@@ -55,6 +55,30 @@ stamp and push gate all depend on it.
 
 ## Step 1b: team config
 
+## Step 1c: surface coverage ledger
+
+After reading the config and before dispatching agents, build a lightweight
+coverage ledger so nothing silently falls through. Write
+`.security-review/coverage-ledger.md` with one row per surface class found in
+scope:
+
+```markdown
+# Coverage ledger (<review_id>)
+| Surface | Files | Agent assigned | Status |
+| :- | :- | :- | :- |
+| server-code (injection/auth) | 12 | injection-reviewer, auth-reviewer | planned |
+| infra/ci | 3 | supply-chain-reviewer, cloud-reviewer | planned |
+| ai-llm | 1 | ai-llm-reviewer | planned |
+| dependency-manifest | 2 | dependency-reviewer | planned |
+| crypto | 0 | — | skipped (no crypto in scope) |
+```
+
+Mark each agent `planned` before dispatch, `done` when results arrive, and
+`skipped (reason)` if you chose not to dispatch it. After all agents return,
+update status and add a "Coverage gaps" section for any surface with no assigned
+agent. A surface that is in scope and has no coverage is an explicit gap, not a
+silent omission.
+
 If `.security-review/config.md` exists at the repo root, read it (its shape is
 `${CLAUDE_SKILL_DIR}/config-template.md`). Keep these in mind for the whole run:
 
@@ -150,6 +174,9 @@ nothing to review; for example a CSS-only change needs no auth-reviewer.
 | `devsecops-reviewer:config-secrets-reviewer` | any non-doc file (secrets hide anywhere), and always for config, env, Dockerfiles, CI, IaC, logging code |
 | `devsecops-reviewer:crypto-reviewer` | code that hashes passwords, encrypts/decrypts, signs/verifies, generates tokens/IDs/OTPs/salts/nonces, handles keys/IVs, configures TLS/cert validation, or issues/verifies JWTs |
 | `devsecops-reviewer:dependency-reviewer` | a dependency manifest or lockfile in scope, any dependency-scanner hit, or `--all` mode |
+| `devsecops-reviewer:supply-chain-reviewer` | CI/CD workflow files (`.github/`, `.gitlab-ci.yml`, `Jenkinsfile`, `Makefile` with release targets), Dockerfiles, build scripts (`Makefile`, `build.gradle`, `Cargo.toml`, etc.), release/packaging config, or `--all` mode on a repo with CI |
+| `devsecops-reviewer:cloud-reviewer` | Terraform/OpenTofu/CDK/Pulumi, CloudFormation, Kubernetes manifests (`*.yaml` in `k8s/`, `helm/`, `manifests/`), Dockerfiles, `serverless.yml`, IAM policy JSON/YAML, or any file under `infra/`, `deploy/`, `cloud/` |
+| `devsecops-reviewer:ai-llm-reviewer` | code that calls an LLM API (OpenAI, Anthropic, Bedrock, etc.), implements a tool-calling loop, reads from a vector store/RAG pipeline, processes MCP tool schemas/results, or assembles prompts from untrusted sources |
 
 If only `docs/assets` files changed, dispatch only config-secrets-reviewer.
 Dispatch `crypto-reviewer` only when the scope actually touches crypto (per the
@@ -169,6 +196,9 @@ usually pass **no** model override and let the default apply:
 | crypto-reviewer | `sonnet` (high effort) | reasoning about primitives, keys, randomness and signatures |
 | config-secrets-reviewer | `haiku` (medium effort) | mostly reading config and matching patterns |
 | dependency-reviewer | `haiku` (low effort) | manifest/version lookups, little reasoning |
+| supply-chain-reviewer | `sonnet` (high effort) | CI workflow trust analysis, build-input tracing |
+| cloud-reviewer | `sonnet` (high effort) | IaC policy reasoning, IAM and container security |
+| ai-llm-reviewer | `sonnet` (high effort) | LLM trust-boundary reasoning, MCP and tool-call analysis |
 
 Override the model **per dispatch** (via the Agent tool's `model` parameter)
 only when the change clearly calls for it — this is the "pick the right model"
@@ -207,6 +237,8 @@ Return the JSON envelope from ${CLAUDE_SKILL_DIR}/finding-schema.md as the last 
 
 ## Step 7: merge results
 
+0. Update the coverage ledger (`.security-review/coverage-ledger.md`) from Step 1c: mark each agent that returned results as `done`, and any that produced no findings or were not dispatched as `skipped (<reason>)`. Add a "Coverage gaps" section if any in-scope surface has no assigned agent. This takes one Edit call and costs nothing — do it before merging findings.
+
 1. Parse each agent's JSON envelope. If one is missing or malformed, ask that agent once (SendMessage, if available) to resend only the JSON; otherwise extract what you can and note it in the report.
 2. Add scanner hits that no agent covered as findings with `detected_by: ["<tool>:<rule>"]` and confidence `likely` (gitleaks, dependency auditors) or `suspected` (semgrep). Drop scanner hits listed in any `disproved_scanner_findings`.
 3. Deduplicate: same file, overlapping lines, same category group → keep one finding with the highest severity and confidence, union `detected_by`, keep the clearest explanation and fix.
@@ -235,7 +267,8 @@ Apply the exclusion list in ${CLAUDE_SKILL_DIR}/severity-policy.md. Return the v
 Apply its rulings:
 - `drop` → set the finding `false_positive` with `resolution_note` = the verifier's reason (prefix `verifier:`). It no longer counts toward the verdict.
 - `adjust` → set `severity`/`confidence` to the verifier's `severity_out`/`confidence_out`; append the reason to `resolution_note`.
-- `keep` → keep as is; if `confidence_out` is `suspected` and there's a question, carry it into step 8.
+- `keep` with `confidence_out: "suspected"` → carry the question into step 8.
+- `keep` with `confidence_out: "needs_validation"` → keep as open with the verifier's exact missing fact in `resolution_note`. In interactive mode, surface it as an open question (the developer or platform owner must observe the deployment fact). In non-interactive mode, list it under "Open questions / needs validation" in the report. A `needs_validation` finding does **not** block the push gate by itself (treat it as `medium` for verdict unless the underlying severity is critical/high, in which case it blocks as normal).
 
 Log `finding_verified id=<id> verdict=<keep|drop|adjust> severity=<severity_out>`
 for each. You keep final judgement: if the verifier drops something you are sure
@@ -305,6 +338,7 @@ Write two files named after the review id from step 2:
   "stack": { "languages": [], "frameworks": [] },
   "scanners": [ { "tool": "...", "status": "ran|not_installed|error|skipped", "findings": 0 } ],
   "agents": [ { "agent": "...", "files_reviewed": 0, "findings": 0 } ],
+  "coverage_gaps": [],
   "counts": { "critical": 0, "high": 0, "medium": 0, "low": 0, "info": 0 },
   "findings": [ "...finding objects with status and resolution_note..." ],
   "open_questions": [ { "id": "Q1", "finding_ids": [], "question": "..." } ]

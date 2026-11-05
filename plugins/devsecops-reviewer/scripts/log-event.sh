@@ -15,7 +15,7 @@ set -u
 
 . "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"
 
-DSR_EVENT_TYPES="review_started config_loaded scope_detected stack_detected scanner_result agent_started agent_completed finding_reported finding_verified question_asked question_answered finding_accepted finding_rejected fix_applied fix_verified verdict block_overridden push_blocked push_allowed review_error"
+DSR_EVENT_TYPES="review_started config_loaded scope_detected stack_detected scanner_result agent_started agent_completed finding_reported finding_verified question_asked question_answered finding_accepted finding_rejected fix_applied fix_verified verdict block_overridden push_blocked push_allowed review_error coverage_ledger_updated"
 
 usage() {
   dsr_usage "$0"

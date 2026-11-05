@@ -165,3 +165,46 @@ verifier rated it low as a placeholder; the fixture expects medium (a committed
 default signing key is a predictable-key weakness). Documented judgment call; the
 suite passes without chasing it. Real-app re-runs (NodeGoat/clean app) with the
 verifier active are the remaining optional validation.
+
+## Iteration 6 — Cloudflare security-audit-skill integration (2026-11-05)
+
+Reviewed `cloudflare/security-audit-skill` (open-sourced production harness behind
+Cloudflare's vulnerability-discovery infrastructure). Key ideas adopted:
+
+**New agents (3):**
+- `supply-chain-reviewer.md` (sonnet/high, yellow) — dependency namespace confusion,
+  mutable build inputs, generated-source provenance, build-context secret inclusion,
+  untrusted code in privileged CI workflows (`pull_request_target`), workflow expression
+  injection, CI cache/artifact trust mixing, automation identity overreach, release
+  signing gaps, plugin trust expansion. Maps to OWASP A08.
+- `cloud-reviewer.md` (sonnet/high, cyan) — IAM/workload identity overreach, cross-account
+  role confusion, unexpected service reachability, trusted-proxy bypass, container
+  host-capability exposure, admission policy gaps, security-control precedence drift,
+  secret exposure across workload boundaries, managed-storage policy confusion. Maps to
+  OWASP A05/A07.
+- `ai-llm-reviewer.md` (sonnet/high, magenta) — indirect prompt injection via retrieved
+  content, cross-session context bleed, persistent memory poisoning, prompt role/provenance
+  confusion, tool-argument injection into dangerous sinks, excessive agency/confused-deputy
+  authority, action-confirmation binding failures, unbounded delegated action loops, MCP
+  sub-agent trust inheritance, MCP identity confusion, insecure model output rendering. Maps
+  to OWASP A01/A03 extended for LLM systems (OWASP LLM Top 10).
+
+**New confidence tier `needs_validation`:**
+Added as a 4th confidence level alongside confirmed/likely/suspected. Signals that the
+exploit path probably exists but requires a hosted-runner, registry, cloud-account policy,
+model/provider, or deployment fact not visible in source — e.g. "is `pull_request_target`
+actually triggered here with untrusted code?" or "is this IAM role reachable from outside
+the VPC?". Distinct from `suspected` (which asks the developer a code question);
+`needs_validation` asks an owner to observe the deployment. A `needs_validation` finding
+does not block the push gate on its own unless its underlying severity is critical/high.
+
+**Coverage ledger (Step 1c):**
+Lightweight surface tracking added to SKILL.md: before dispatch, the orchestrator writes
+`.security-review/coverage-ledger.md` mapping each in-scope surface class to its assigned
+agent. After all agents return, it updates status and adds a "Coverage gaps" section for
+any surface with no assigned agent. Explicit gap vs. silent omission — same principle as
+Cloudflare's `coverage-ledger.json` but lighter-weight for a pre-push flow.
+
+Plugin now has 10 agents (was 7), 4 skills (unchanged). `claude plugin validate` passes.
+Dispatches supply-chain/cloud/ai-llm only when the relevant files are in scope; existing
+flows unchanged for JS/Python/PHP/Java changes without CI/IaC/LLM code.
