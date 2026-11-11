@@ -12,6 +12,7 @@ Standard library only, Python 3.8+.
 """
 import argparse
 import datetime
+import hashlib
 import json
 import os
 import re
@@ -1731,6 +1732,91 @@ def render_report(report, doc):
     return "\n".join(out) + "\n"
 
 
+# SARIF 2.1.0 — the standard static-analysis format. GitHub code scanning reads
+# `level` for the alert bucket and the rule's `security-severity` for the score.
+SARIF_LEVEL = {"critical": "error", "high": "error", "medium": "warning", "low": "note", "info": "note"}
+SARIF_SECSEV = {"critical": "9.5", "high": "8.0", "medium": "5.5", "low": "3.0", "info": "1.0"}
+PLUGIN_URL = "https://github.com/khalilrmilA/claude-plugin"
+
+
+def plugin_version():
+    try:
+        path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..",
+                            ".claude-plugin", "plugin.json")
+        with open(path, encoding="utf-8") as fh:
+            return as_text(json.load(fh).get("version")) or "0"
+    except (OSError, ValueError):
+        return "0"
+
+
+def render_sarif(report):
+    """A SARIF 2.1.0 run over the unresolved findings, for CI code scanning."""
+    findings = [f for f in report["findings"] if f.get("status") not in RESOLVED]
+    rules, rule_index, results = [], {}, []
+    for finding in findings:
+        cat = finding.get("category") if isinstance(finding.get("category"), dict) else {}
+        key = (cat.get("key") or "other").strip() or "other"
+        _, owasp_default, cwe_default = CATEGORIES.get(key, (key, "", ""))
+        owasp = as_text(cat.get("owasp")).strip() or owasp_default
+        cwe = as_text(cat.get("cwe")).strip() or cwe_default
+        sev = finding.get("severity", "info")
+        secsev = SARIF_SECSEV.get(sev, "1.0")
+        if key not in rule_index:
+            cwe_num = re.sub(r"\D", "", cwe.split(",")[0]) if cwe else ""
+            rule_index[key] = len(rules)
+            rules.append({
+                "id": key,
+                "name": "".join(w.capitalize() for w in re.split(r"[-_ ]", key)),
+                "shortDescription": {"text": key.replace("-", " ")},
+                "fullDescription": {"text": " / ".join(x for x in (owasp, cwe) if x) or key},
+                "helpUri": ("https://cwe.mitre.org/data/definitions/%s.html" % cwe_num)
+                           if cwe_num else "https://owasp.org/Top10/",
+                "properties": {"tags": ["security"] + ([owasp.split(":")[0]] if ":" in owasp else []),
+                               "security-severity": secsev},
+            })
+        else:  # keep the rule's score at the most severe instance
+            prop = rules[rule_index[key]]["properties"]
+            if float(secsev) > float(prop["security-severity"]):
+                prop["security-severity"] = secsev
+        parts = [finding.get("title", "").strip()]
+        for label, field in (("Attack", "attack_scenario"), ("Impact", "impact")):
+            if finding.get(field):
+                parts.append("%s: %s" % (label, finding[field]))
+        fix = finding.get("proposed_fix", {}).get("explanation", "")
+        if fix:
+            parts.append("Fix: " + fix)
+        start = as_int(finding.get("line_start")) or 1
+        end = max(as_int(finding.get("line_end")) or start, start)
+        fingerprint = hashlib.sha1(
+            ("%s|%s|%s" % (key, finding.get("file", ""), finding.get("title", "")))
+            .encode("utf-8")).hexdigest()[:20]
+        results.append({
+            "ruleId": key,
+            "ruleIndex": rule_index[key],
+            "level": SARIF_LEVEL.get(sev, "note"),
+            "message": {"text": mask_secrets(" — ".join(p for p in parts if p)) or key},
+            "locations": [{"physicalLocation": {
+                "artifactLocation": {"uri": finding.get("file", "")},
+                "region": {"startLine": start, "endLine": end}}}],
+            "partialFingerprints": {"devsecopsReviewer/v1": fingerprint},
+            "properties": {k: finding.get(k) for k in ("id", "severity", "confidence", "status")},
+        })
+    return {
+        "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+        "version": "2.1.0",
+        "runs": [{
+            "tool": {"driver": {
+                "name": "devsecops-reviewer",
+                "informationUri": PLUGIN_URL,
+                "version": plugin_version(),
+                "rules": rules,
+            }},
+            "results": results,
+            "properties": {"verdict": report.get("verdict"), "review_id": report.get("review_id")},
+        }],
+    }
+
+
 def cmd_report(args):
     scope = load_scope()
     doc = load_doc(required=False)
@@ -1788,11 +1874,13 @@ def cmd_report(args):
     }
     json_path = "%s/%s.json" % (P_REPORTS, review_id)
     md_path = "%s/%s.md" % (P_REPORTS, review_id)
+    sarif_path = "%s/%s.sarif" % (P_REPORTS, review_id)
     write_json(json_path, report)
     write_text(md_path, render_report(report, doc))
+    write_json(sarif_path, render_sarif(report))
     save_doc(doc)
-    write_text(P_RESULT, "verdict=%s\ncounts=%s\nreport=%s\n" %
-               (computed, ",".join(str(counts[s]) for s in SEVERITIES), md_path))
+    write_text(P_RESULT, "verdict=%s\ncounts=%s\nreport=%s\nsarif=%s\n" %
+               (computed, ",".join(str(counts[s]) for s in SEVERITIES), md_path, sarif_path))
 
     not_run = [s["tool"] for s in report["scanners"] if s["status"] != "ran"]
     print("Security review %s: %s" % (review_id, verdict.replace("_", " ")))
@@ -1812,6 +1900,7 @@ def cmd_report(args):
     if not_run:
         print("Scanners not run: %s (install commands are in the report)" % ", ".join(not_run))
     print("Report: %s" % md_path)
+    print("SARIF (for CI code scanning): %s" % sarif_path)
     return 0
 
 

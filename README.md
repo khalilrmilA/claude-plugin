@@ -306,9 +306,25 @@ reviewed (compared by Git blob id). So the normal flow — review, then commit,
 then push — stays valid, but committing anything unreviewed invalidates it.
 
 **Limitation:** client-side Git hooks can be bypassed (`git push --no-verify`).
-For a hard guarantee, also enforce the review in CI or as a required status
-check. The stamp (`.security-review/stamp.json`) and the JSONL logs are what a
-server-side check would read.
+For a hard guarantee, also enforce the review in CI — see below.
+
+## CI enforcement and code scanning
+
+Client hooks are a nudge; CI is the wall. Copy
+`plugins/devsecops-reviewer/ci/security-review.yml` to
+`.github/workflows/security-review.yml` in your repo (and set an
+`ANTHROPIC_API_KEY` secret). On every PR/push it runs the review headlessly,
+**fails the job when the verdict is BLOCKED**, and uploads the findings to GitHub
+**code scanning** so they show in the Security tab and inline on the PR.
+
+Every review also writes a **SARIF 2.1.0** file next to the report
+(`.security-review/reports/<id>.sarif`) — the standard static-analysis format, so
+the findings plug into GitHub code scanning or any SARIF-aware tool. Each finding
+maps to a rule (its category, with the CWE help link and an OWASP-derived
+`security-severity`) and carries its severity → `error`/`warning`/`note` level;
+secrets are masked. Make the workflow a required status check to block merges,
+not just pushes. (Each CI run calls the Claude API and costs tokens; scope it
+with `--since origin/<base>` to review only the PR diff.)
 
 ## Logs and telemetry
 

@@ -1,0 +1,68 @@
+# DevSecOps Reviewer — CI enforcement (template).
+#
+# Copy this to .github/workflows/security-review.yml in YOUR repo. It runs the
+# review headlessly on every PR/push, uploads the findings to GitHub code
+# scanning (they appear in the Security tab and inline on the PR), and FAILS the
+# job when the verdict is BLOCKED — the hard, server-side guarantee a client-side
+# git hook can't give.
+#
+# Requires an ANTHROPIC_API_KEY repository secret. Note: each run calls the
+# Claude API and costs tokens; scope it with --since to review only the PR diff
+# if you want to keep that down.
+
+name: Security review
+
+on:
+  pull_request:
+  push:
+    branches: [main, master]
+
+permissions:
+  contents: read
+  security-events: write   # required to upload SARIF to code scanning
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0     # full history so the diff-based scope works
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Install Claude Code + the plugin
+        run: |
+          npm install -g @anthropic-ai/claude-code
+          claude plugin marketplace add khalilrmilA/claude-plugin
+          claude plugin install devsecops-reviewer@devsecops-tools
+
+      - name: Run the security review (headless)
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          # --all audits the whole repo. For PR-diff-only review use:
+          #   /devsecops-reviewer:security-review --since origin/${{ github.base_ref }} --non-interactive
+          claude -p "/devsecops-reviewer:security-review --all --non-interactive" \
+            --permission-mode acceptEdits \
+            --allowedTools "Bash(devsecops-review *),Bash(bash *),Bash(git diff *),Bash(git log *),Bash(git status *),Bash(git show *),Bash(git rev-parse *),Bash(git ls-files *),Bash(git merge-base *),Bash(git blame *),Read,Grep,Glob,Write,Agent" \
+            --disallowedTools "Bash(git push *),Bash(git commit *),Bash(git reset *),Bash(git checkout *)" \
+            </dev/null || true
+
+      - name: Upload findings to code scanning
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: .security-review/reports/
+
+      - name: Fail if the review is BLOCKED
+        if: always()
+        run: |
+          verdict=$(sed -n 's/^verdict=//p' .security-review/report-result.txt 2>/dev/null)
+          echo "Review verdict: ${verdict:-unknown}"
+          test "$verdict" != "BLOCKED"

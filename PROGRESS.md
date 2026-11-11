@@ -276,3 +276,26 @@ Two fixes from a real run on an external project (`exams`):
    non-blocking questions were listed rather than asked; this firms that up.)
 
 shellcheck-clean; `claude plugin validate` passes.
+
+## Iteration 9 — SARIF export + CI enforcement (v0.3.0, 2026-11-11)
+
+Closed the "hard enforcement needs CI" gap from the overview.
+
+- **SARIF 2.1.0 export.** `review.py report` now also writes
+  `.security-review/reports/<id>.sarif` (and `report-result.txt` gains a `sarif=`
+  line). Each unresolved finding → a SARIF result: category as the rule (with the
+  CWE help URL and an OWASP-derived `security-severity`), severity mapped to
+  `error`/`warning`/`note`, a stable `partialFingerprints` hash for cross-run
+  dedupe, and masked messages. Verified structurally on the demo review (7 rules /
+  7 results, no secret leakage, correct severity + level mapping).
+- **CI workflow template** at `ci/security-review.yml` (copied by the user into
+  `.github/workflows/`): runs the review headlessly on PR/push, uploads the SARIF
+  to GitHub **code scanning** (findings appear in the Security tab + inline on the
+  PR), and **fails the job when the verdict is BLOCKED** — the server-side
+  guarantee a bypassable client hook can't provide. README documents it.
+- Version 0.2.0 → **0.3.0**; fixed a duplicate `keywords` key; `claude plugin
+  validate` passes.
+
+The SARIF/verdict logic is a deterministic transform and fully tested offline;
+the headless `claude -p` CI step mirrors the already-working git pre-push headless
+mode and the eval harness, so it needs no new API-dependent code path.

@@ -1,11 +1,11 @@
 {
   "name": "devsecops-reviewer",
   "displayName": "DevSecOps Reviewer",
-  "version": "0.2.0",
-  "description": "Pre-push security review of a developer's changes: stack detection, deterministic scanners, specialist reviewer agents, an adversarial verifier, guided fixes, and a push gate that requires a passing review stamp. Findings are merged, de-duplicated and scored by a deterministic engine (OWASP Top 10:2025 + CWE).",
+  "version": "0.3.0",
+  "description": "Pre-push security review of a developer's changes: stack detection, deterministic scanners, specialist reviewer agents, an adversarial verifier, guided fixes, and a push gate that requires a passing review stamp. Findings are merged, de-duplicated and scored by a deterministic engine (OWASP Top 10:2025 + CWE), exported as SARIF for GitHub code scanning, and enforceable in CI.",
+  "keywords": ["security", "devsecops", "code-review", "sast", "secrets", "pre-push", "owasp", "sarif", "ci"],
   "author": {
     "name": "DevSecOps Team"
   },
-  "license": "UNLICENSED",
-  "keywords": ["security", "devsecops", "code-review", "sast", "secrets", "pre-push", "owasp"]
+  "license": "UNLICENSED"
 }
