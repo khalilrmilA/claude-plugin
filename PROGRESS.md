@@ -258,3 +258,21 @@ Not done here: a full scored eval re-run with the deterministic engine (needs th
 `claude` CLI + API budget). review.py's logic was exercised offline on synthetic
 envelopes (collect/dedupe/verify/report/verdict/masking/mutations) and the
 capture hook end-to-end; the agent-orchestration path is unchanged in shape.
+
+## Iteration 8 — committable team config + always-ask questions (2026-11-11)
+
+Two fixes from a real run on an external project (`exams`):
+
+1. **`.security-review/config.md` is now committable.** `dsr_ensure_gitignore`
+   used to write `.security-review/` (which also hid the team config). It now
+   writes `.security-review/*` + `!.security-review/config.md`, so stamps/reports/
+   logs stay ignored but the shared config is tracked. It also **migrates** a repo
+   an older version already touched (removes the old plain-directory line, which
+   git otherwise lets override any later re-include). Tested fresh / migration /
+   idempotent; preserves the rest of `.gitignore`.
+2. **Step 8 asks every open question in interactive mode**, even all-`info`/`low`
+   ones, instead of deferring them to the report — and points at `config.md`
+   `scope-notes` for pre-answering recurring ones. (On the `exams` run, 12
+   non-blocking questions were listed rather than asked; this firms that up.)
+
+shellcheck-clean; `claude plugin validate` passes.

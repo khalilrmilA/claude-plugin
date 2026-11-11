@@ -271,19 +271,39 @@ dsr_default_base_ref() {
   return 1
 }
 
-# Make sure .security-review/ is ignored by git in the current repo.
+# Make sure .security-review/ is git-ignored, EXCEPT config.md -- the shared team
+# config belongs in version control. Also migrates a repo first seen by an older
+# plugin version that ignored the whole directory (which would keep config.md
+# ignored no matter what rule follows it: git won't re-include a file whose
+# parent directory is excluded).
 dsr_ensure_gitignore() {
-  local root gi
+  local root gi tmp
   root=$(dsr_repo_root) || return 1
   gi="$root/.gitignore"
-  if git -C "$root" check-ignore -q "$DSR_STATE_DIR/probe" 2>/dev/null; then
+  # Already set up the way we want?
+  if [ -f "$gi" ] && grep -qxF "!$DSR_STATE_DIR/config.md" "$gi" 2>/dev/null; then
     return 0
   fi
+  # Drop the old plain-directory ignore (and its comment) we wrote before.
+  if [ -f "$gi" ] && grep -qxF "$DSR_STATE_DIR/" "$gi" 2>/dev/null; then
+    tmp=$(mktemp 2>/dev/null) || tmp="$gi.dsr.$$"
+    if grep -vxF -e "$DSR_STATE_DIR/" \
+          -e "# devsecops-reviewer local state (stamps, reports, logs)" "$gi" >"$tmp"; then
+      mv "$tmp" "$gi"
+    else
+      rm -f "$tmp"
+    fi
+  fi
+  # Ensure a trailing newline before appending.
   if [ -f "$gi" ] && [ -s "$gi" ] && [ "$(tail -c1 "$gi" | od -An -c | tr -d ' ')" != '\n' ]; then
     printf '\n' >>"$gi"
   fi
-  printf '%s\n' "# devsecops-reviewer local state (stamps, reports, logs)" "$DSR_STATE_DIR/" >>"$gi"
-  echo "added $DSR_STATE_DIR/ to .gitignore" >&2
+  printf '%s\n' \
+    "# devsecops-reviewer local state (stamps, reports, logs) are ignored," \
+    "# but the shared team config is committed so the whole team gets it." \
+    "$DSR_STATE_DIR/*" \
+    "!$DSR_STATE_DIR/config.md" >>"$gi"
+  echo "added $DSR_STATE_DIR ignore rules to .gitignore (config.md stays tracked)" >&2
 }
 
 dsr_have() { command -v "$1" >/dev/null 2>&1; }
