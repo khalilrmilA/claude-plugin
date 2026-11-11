@@ -95,7 +95,7 @@ field definitions: `${CLAUDE_PLUGIN_ROOT}/skills/security-review/finding-schema.
     {
       "id": "CFG-001",
       "title": "...",
-      "category": { "key": "secrets|default-credentials|debug-mode|cors|cookies|security-headers|misconfiguration|weak-crypto|sensitive-logging|info-exposure|other", "owasp": "A05:2021-Security Misconfiguration", "cwe": "CWE-798" },
+      "category": { "key": "secrets|default-credentials|debug-mode|cors|cookies|security-headers|misconfiguration|weak-crypto|sensitive-logging|info-exposure|other", "owasp": "A02:2025-Security Misconfiguration", "cwe": "CWE-798" },
       "severity": "critical|high|medium|low|info",
       "confidence": "confirmed|likely|suspected",
       "file": "path/from/repo/root",

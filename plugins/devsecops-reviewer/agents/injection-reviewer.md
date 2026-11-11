@@ -87,7 +87,7 @@ field definitions: `${CLAUDE_PLUGIN_ROOT}/skills/security-review/finding-schema.
     {
       "id": "INJ-001",
       "title": "...",
-      "category": { "key": "sqli|nosqli|command-injection|ldap-injection|template-injection|code-injection|xss|path-traversal|ssrf|open-redirect|xxe|deserialization|file-upload|other", "owasp": "A03:2021-Injection", "cwe": "CWE-89" },
+      "category": { "key": "sqli|nosqli|command-injection|ldap-injection|template-injection|code-injection|xss|path-traversal|ssrf|open-redirect|xxe|deserialization|file-upload|other", "owasp": "A05:2025-Injection", "cwe": "CWE-89" },
       "severity": "critical|high|medium|low|info",
       "confidence": "confirmed|likely|suspected",
       "file": "path/from/repo/root",

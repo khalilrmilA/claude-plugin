@@ -85,8 +85,11 @@ confused-deputy authority, action-confirmation binding failures, unbounded
 delegated action loops, MCP sub-agent trust inheritance, MCP identity confusion,
 insecure model output rendering.
 
-Each finding maps to the **OWASP Top 10 (2021)** and a **CWE**, with a severity
-and a confidence (`confirmed` / `likely` / `suspected` / `needs_validation`).
+Each finding maps to the **OWASP Top 10:2025** and a **CWE** (AI/LLM findings use
+the **OWASP LLM Top 10**), with a severity and a confidence (`confirmed` /
+`likely` / `suspected` / `needs_validation`). Findings are merged,
+de-duplicated and scored by a deterministic engine (`scripts/review.py`), so the
+verdict never depends on the model retyping JSON.
 
 ### Extra skills you can run directly
 
@@ -130,6 +133,10 @@ false-positive-filtering instructions.
 
 - **Claude Code** v2.1.269 or later (`claude --version`; `claude update`).
 - **Git** 2.31+.
+- **Python 3** (recommended) — the deterministic review engine (merge /
+  de-dupe / verifier rulings / verdict / report) runs on it. Almost every dev
+  box has it; without it, the review falls back to doing that bookkeeping by
+  hand. Git Bash on Windows finds `python` automatically.
 - Optional **scanners** (the review works without them; it just adds a
   deterministic layer) — see [Install the scanners](#install-the-scanners).
 - The scripts run in Bash. On Windows that is **Git Bash**, which ships with
@@ -360,7 +367,7 @@ claude-plugin/                        # this repo == the marketplace (name: devs
 │   ├── skills/threat-model/          # trust-boundary / attacker-goal map
 │   ├── skills/deep-secret-scan/      # tree + git-history secret sweep
 │   ├── skills/git-access-setup/
-│   ├── agents/                       # 7 read-only agents (5 reviewers + crypto + finding-verifier)
+│   ├── agents/                       # 10 read-only agents (injection, auth, logic, config-secrets, crypto, dependency, supply-chain, cloud, ai-llm + finding-verifier)
 │   ├── hooks/hooks.json              # push gate + lifecycle logging
 │   ├── scripts/                      # scope, stack, scanners, deep-secrets, stamp, logging
 │   ├── git-hooks/pre-push

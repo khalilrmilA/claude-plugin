@@ -62,7 +62,7 @@ field definitions: `${CLAUDE_PLUGIN_ROOT}/skills/security-review/finding-schema.
     {
       "id": "DEP-001",
       "title": "<package>@<version> has known vulnerabilities (<advisory ids>)",
-      "category": { "key": "vulnerable-dependency|typosquatting|other", "owasp": "A06:2021-Vulnerable and Outdated Components", "cwe": "CWE-1395" },
+      "category": { "key": "vulnerable-dependency|typosquatting|other", "owasp": "A03:2025-Software Supply Chain Failures", "cwe": "CWE-1395" },
       "severity": "critical|high|medium|low|info",
       "confidence": "confirmed|likely|suspected",
       "file": "requirements.txt",

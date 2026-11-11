@@ -7,6 +7,11 @@
 #   devsecops-review scope [--all|--staged|--since <ref>]   compute review scope
 #   devsecops-review stack                                  detect languages/frameworks
 #   devsecops-review scan [--all]                           run installed scanners
+#   devsecops-review surfaces                               classify scope, suggest agents, write the ledger
+#   devsecops-review collect [--expect a,b] [--rebuild]     merge agent findings (de-duped)
+#   devsecops-review verify [<file>]                        apply the finding-verifier's rulings
+#   devsecops-review findings <list|show|set|merge|add|fixed|reject|answer> ...   work with findings
+#   devsecops-review report --block-on <sev,...> [...]      compute verdict + write the report
 #   devsecops-review deep-secrets [--tree|--history|--all]  deep secret sweep (tree + git history)
 #   devsecops-review log <event> [k=v ...]                  append a telemetry event
 #   devsecops-review finalize --verdict <V> [...]           write stamp + log verdict
@@ -28,6 +33,10 @@ case "$cmd" in
   check)        exec bash "$S/check-review-stamp.sh" "$@";;
   install-hook) exec bash "$S/install-git-hook.sh" "$@";;
   git-check)    exec bash "$S/git-check.sh" "$@";;
+  # review.py (deterministic bookkeeping) via its wrapper:
+  surfaces|collect|verify|report|capture|implied-verdict)
+                exec bash "$S/review.sh" "$cmd" "$@";;
+  findings)     exec bash "$S/review.sh" "$@";;   # findings list|show|set|merge|add|fixed|reject|answer
   root)         echo "$ROOT";;
   help|-h|--help) awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "$0";;
   *) echo "devsecops-review: unknown command '$cmd' (try: devsecops-review help)" >&2; exit 2;;

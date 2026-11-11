@@ -208,3 +208,53 @@ Cloudflare's `coverage-ledger.json` but lighter-weight for a pre-push flow.
 Plugin now has 10 agents (was 7), 4 skills (unchanged). `claude plugin validate` passes.
 Dispatches supply-chain/cloud/ai-llm only when the relevant files are in scope; existing
 flows unchanged for JS/Python/PHP/Java changes without CI/IaC/LLM code.
+
+## Iteration 7 — deterministic review engine + perf + OWASP 2025 (2026-11-11)
+
+Moved the error-prone, prompt-driven bookkeeping out of the orchestrator into a
+deterministic Python engine, and sped up the hot shell paths.
+
+**New: `scripts/review.py` (+ `review.sh` wrapper).** One standard-library script
+owns the mechanical review state in `.security-review/findings.json`:
+- `surfaces` — classify the scope, suggest agents, write the coverage ledger.
+- `collect [--expect …]` — merge every reviewer's JSON envelope, normalize + mask, assign ids, **de-duplicate** (same file / overlapping lines / same category group), merge questions and disproved-scanner hits, flag MISSING agents and near-duplicates, log `finding_reported`.
+- `verify` — apply the finding-verifier's rulings (drop / adjust / keep), flag any critical/high it dropped or downgraded for the orchestrator to double-check.
+- `findings list|show|set|merge|add|fixed|reject|answer` — work with findings.
+- `report --block-on <sev,…> [--gap …] [--override-reason …]` — compute the verdict per severity-policy, write the JSON + masked Markdown report, and a `report-result.txt` the stamp step reads.
+A hardcoded-secret safety net masks AKIA/gh*/sk_live/JWT/private-key shapes in every report/line even if an agent forgot to. `review.sh` picks a working Python 3, runs review.py from the repo root, and ships review.py's telemetry through `log-event.sh --batch` in one process. Exit 3 (no Python) → the skill falls back to the manual flow in finding-schema.md.
+
+**New: automatic envelope capture.** A `SubagentStop` hook (`review.sh capture`)
+saves each reviewer agent's JSON envelope under `.security-review/agents/`, and
+asks once for a resend if the JSON is malformed (guarded by `stop_hook_active`,
+so it can't loop). `collect`/`verify` just read those files; the orchestrator can
+also drop an envelope there by hand.
+
+**SKILL.md rewired** (Steps 1c, 6, 7, 7b, 8, 9, 10, 11): the orchestrator now
+dispatches agents and drives fixes, but merging / verifying / scoring / reporting
+are deterministic command calls. Dispatcher (`bin/devsecops-review`) gained
+`surfaces|collect|verify|report|findings|capture|implied-verdict`.
+
+**Perf (Windows-dominated cost is process creation):** `lib/common.sh` gained
+no-fork helpers — `dsr_now_iso_to` (UTC via epoch arithmetic, no `date` call),
+`dsr_json_escape_to` (parameter expansion, no `tr`/subshell), `dsr_file_field_to`,
+`dsr_strip_url_credentials_to`, cached `dsr_plugin_version`. `log-event.sh` now
+computes the repo context once and supports `--batch` (one process for many
+events). In a quick test, three log calls dropped from ~9.5 s to ~1.3 s and a
+4-event batch to ~0.35 s. All scripts stay shellcheck-clean; the existing
+pipeline (scope/stack/scan/finalize/check/git-check/hook-log) was re-tested
+unchanged. The directory-resolution micro-opt was reverted to the safe subshell
+form.
+
+**OWASP Top 10:2025.** `finding-schema.md`, the five original agents' example
+envelopes, and review.py's category→OWASP table moved from 2021 to 2025
+(Injection → A05 and absorbs XSS; SSRF → A01; Crypto → A04; Misconfig → A02 and
+absorbs XXE; Vulnerable Components → A03 Software Supply Chain Failures; Insecure
+Design → A06). AI/LLM findings use the OWASP LLM Top 10. Eval scorer matches on
+category **group** + severity, not the OWASP string, so this is eval-safe.
+
+**Version** bumped 0.1.0 → 0.2.0. `claude plugin validate` passes.
+
+Not done here: a full scored eval re-run with the deterministic engine (needs the
+`claude` CLI + API budget). review.py's logic was exercised offline on synthetic
+envelopes (collect/dedupe/verify/report/verdict/masking/mutations) and the
+capture hook end-to-end; the agent-orchestration path is unchanged in shape.

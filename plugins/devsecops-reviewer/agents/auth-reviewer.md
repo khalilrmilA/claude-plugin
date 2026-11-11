@@ -86,7 +86,7 @@ field definitions: `${CLAUDE_PLUGIN_ROOT}/skills/security-review/finding-schema.
     {
       "id": "AUTH-001",
       "title": "...",
-      "category": { "key": "authn|session-jwt|password-storage|authz|idor|privilege-escalation|mass-assignment|csrf|other", "owasp": "A01:2021-Broken Access Control", "cwe": "CWE-639" },
+      "category": { "key": "authn|session-jwt|password-storage|authz|idor|privilege-escalation|mass-assignment|csrf|other", "owasp": "A01:2025-Broken Access Control", "cwe": "CWE-639" },
       "severity": "critical|high|medium|low|info",
       "confidence": "confirmed|likely|suspected",
       "file": "path/from/repo/root",

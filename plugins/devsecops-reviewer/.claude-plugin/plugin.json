@@ -1,8 +1,8 @@
 {
   "name": "devsecops-reviewer",
   "displayName": "DevSecOps Reviewer",
-  "version": "0.1.0",
-  "description": "Pre-push security review of a developer's changes: stack detection, deterministic scanners, specialist reviewer agents, guided fixes, and a push gate that requires a passing review stamp.",
+  "version": "0.2.0",
+  "description": "Pre-push security review of a developer's changes: stack detection, deterministic scanners, specialist reviewer agents, an adversarial verifier, guided fixes, and a push gate that requires a passing review stamp. Findings are merged, de-duplicated and scored by a deterministic engine (OWASP Top 10:2025 + CWE).",
   "author": {
     "name": "DevSecOps Team"
   },

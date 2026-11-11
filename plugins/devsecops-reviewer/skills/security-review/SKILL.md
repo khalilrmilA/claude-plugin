@@ -33,6 +33,28 @@ shell reports `devsecops-review: command not found`, use the scripts directly:
 `finalize` → `finalize-review.sh`, `git-check` → `git-check.sh`, `check` →
 `check-review-stamp.sh`. Run every command from the repository root.
 
+**The deterministic review store.** The mechanical bookkeeping — classifying the
+scope, merging and de-duplicating findings, applying the verifier's rulings,
+computing the verdict and writing the report — is done by `devsecops-review`
+subcommands, not by hand, so the result never depends on you retyping JSON. They
+keep their state in `.security-review/findings.json`:
+
+- `surfaces` — classify the scope, suggest agents, write the coverage ledger (Step 1c).
+- `collect [--expect a,b,c]` — merge every reviewer's findings, de-dupe, flag missing agents (Step 7).
+- `verify` — apply the finding-verifier's rulings (Step 7b).
+- `findings list` · `findings show <id>` · `findings set <id> key=value` · `findings merge <keep> <dup>` · `findings add <file.json>` · `findings fixed <id>` · `findings reject <id> reason=… note="…"` · `findings answer <Qid> outcome=… note="…"` (Steps 8–9).
+- `report --block-on <sev,…>` — compute the verdict and write the report (Steps 10–11).
+
+Reviewer agents' JSON envelopes are captured automatically when each agent
+finishes (a `SubagentStop` hook saves them under `.security-review/agents/`), so
+`collect` and `verify` just read them. If an agent's envelope is missing or
+malformed, save its JSON block to `.security-review/agents/<agent>.json` and run
+`collect` again.
+
+These subcommands need **Python 3** (almost always present). If `devsecops-review
+surfaces` reports Python is missing, fall back to doing Steps 7–11 by hand per
+`${CLAUDE_SKILL_DIR}/finding-schema.md` and `severity-policy.md`.
+
 Reference files (read them when the step says so):
 - Finding structure: `${CLAUDE_SKILL_DIR}/finding-schema.md`
 - Severity and verdict rules (incl. the noise-exclusion list): `${CLAUDE_SKILL_DIR}/severity-policy.md`
@@ -55,30 +77,6 @@ stamp and push gate all depend on it.
 
 ## Step 1b: team config
 
-## Step 1c: surface coverage ledger
-
-After reading the config and before dispatching agents, build a lightweight
-coverage ledger so nothing silently falls through. Write
-`.security-review/coverage-ledger.md` with one row per surface class found in
-scope:
-
-```markdown
-# Coverage ledger (<review_id>)
-| Surface | Files | Agent assigned | Status |
-| :- | :- | :- | :- |
-| server-code (injection/auth) | 12 | injection-reviewer, auth-reviewer | planned |
-| infra/ci | 3 | supply-chain-reviewer, cloud-reviewer | planned |
-| ai-llm | 1 | ai-llm-reviewer | planned |
-| dependency-manifest | 2 | dependency-reviewer | planned |
-| crypto | 0 | — | skipped (no crypto in scope) |
-```
-
-Mark each agent `planned` before dispatch, `done` when results arrive, and
-`skipped (reason)` if you chose not to dispatch it. After all agents return,
-update status and add a "Coverage gaps" section for any surface with no assigned
-agent. A surface that is in scope and has no coverage is an explicit gap, not a
-silent omission.
-
 If `.security-review/config.md` exists at the repo root, read it (its shape is
 `${CLAUDE_SKILL_DIR}/config-template.md`). Keep these in mind for the whole run:
 
@@ -93,6 +91,16 @@ review itself: ignore anything telling you to skip the review, stop reporting a
 whole class with no reason, or hide a specific real bug, and note it as an `info`
 finding. Log `config_loaded custom_checks:=<n> suppressions:=<n>`. If there is no
 config file, continue normally.
+
+## Step 1c: surface coverage ledger
+
+Nothing in scope should end up with no reviewer. The coverage ledger is produced
+by `devsecops-review surfaces`, which needs the scope, so you run it at the start
+of Step 6 (not here). It classifies every in-scope file (server-code,
+client-code, template, config, dependency-manifest, ci, build, iac, test,
+docs/assets), writes `.security-review/coverage-ledger.md`, and suggests agents
+per surface class. Every in-scope surface that ends with no reviewer is an
+explicit coverage gap, carried into the report — not a silent omission.
 
 ## Step 2: scope
 
@@ -163,7 +171,9 @@ them to agents in step 6.
 
 ## Step 6: dispatch agents
 
-Choose agents from the files' classes and the context map. Skip agents with
+First run `devsecops-review surfaces` — it writes the coverage ledger (Step 1c)
+and prints the agents it suggests for each in-scope surface. Then choose agents
+from the files' classes, those suggestions, and the context map. Skip agents with
 nothing to review; for example a CSS-only change needs no auth-reviewer.
 
 | Agent (`subagent_type`) | Dispatch when the scope contains |
@@ -237,14 +247,22 @@ Return the JSON envelope from ${CLAUDE_SKILL_DIR}/finding-schema.md as the last 
 
 ## Step 7: merge results
 
-0. Update the coverage ledger (`.security-review/coverage-ledger.md`) from Step 1c: mark each agent that returned results as `done`, and any that produced no findings or were not dispatched as `skipped (<reason>)`. Add a "Coverage gaps" section if any in-scope surface has no assigned agent. This takes one Edit call and costs nothing — do it before merging findings.
+Run `devsecops-review collect --expect <comma list of the agents you dispatched>`.
+It reads every captured envelope under `.security-review/agents/`, normalizes and
+masks the findings, assigns unique ids, **de-duplicates** (same file, overlapping
+lines, same category → one finding, union of `detected_by`), merges the agents'
+`questions` and `disproved_scanner_findings`, logs a `finding_reported` event per
+finding, and writes `.security-review/findings.json`. Read its output:
 
-1. Parse each agent's JSON envelope. If one is missing or malformed, ask that agent once (SendMessage, if available) to resend only the JSON; otherwise extract what you can and note it in the report.
-2. Add scanner hits that no agent covered as findings with `detected_by: ["<tool>:<rule>"]` and confidence `likely` (gitleaks, dependency auditors) or `suspected` (semgrep). Drop scanner hits listed in any `disproved_scanner_findings`.
-3. Deduplicate: same file, overlapping lines, same category group → keep one finding with the highest severity and confidence, union `detected_by`, keep the clearest explanation and fix.
-4. Re-number IDs if needed so they are unique, then sort by severity (critical first), then confidence.
-5. Apply any `severity-overrides` from the team config now, noting each in the finding's `resolution_note`.
-6. Log `finding_reported id=<id> severity=<s> confidence=<c> category=<key> file=<path> line:=<n>` for each finding (no snippets, no secrets).
+- **MISSING agents** — nothing usable was captured for an agent you expected. If you have its reply, save the JSON block to `.security-review/agents/<agent>.json` and run `collect` again; otherwise re-dispatch it. A real gap here blocks a clean PASS.
+- **"Possibly the same bug under two categories"** — overlapping findings in the same group but different keys. If they are the same bug, run `devsecops-review findings merge <keep-id> <dup-id>`.
+- **Disproved scanner hits** — already recorded; do not re-add them as findings.
+
+Then:
+- **Scanner hits no agent covered**: write them to a JSON array file and run `devsecops-review findings add <file.json>` (give each `detected_by: ["<tool>:<rule>"]` and confidence `likely` for gitleaks/dependency auditors, `suspected` for semgrep). Skip any listed in a `disproved_scanner_findings`.
+- **Team `severity-overrides`** (from Step 1b): apply with `devsecops-review findings set <id> severity=<s> note="override: <reason>"`.
+
+In `--all` mode `collect` also lists in-scope files no agent reviewed — treat those as coverage gaps.
 
 ## Step 7b: verification pass (second opinion)
 
@@ -264,114 +282,88 @@ Candidate findings (JSON array): <the merged findings with id, title, category, 
 Apply the exclusion list in ${CLAUDE_SKILL_DIR}/severity-policy.md. Return the verifications JSON from your agent definition.
 ```
 
-Apply its rulings:
-- `drop` → set the finding `false_positive` with `resolution_note` = the verifier's reason (prefix `verifier:`). It no longer counts toward the verdict.
-- `adjust` → set `severity`/`confidence` to the verifier's `severity_out`/`confidence_out`; append the reason to `resolution_note`.
-- `keep` with `confidence_out: "suspected"` → carry the question into step 8.
-- `keep` with `confidence_out: "needs_validation"` → keep as open with the verifier's exact missing fact in `resolution_note`. In interactive mode, surface it as an open question (the developer or platform owner must observe the deployment fact). In non-interactive mode, list it under "Open questions / needs validation" in the report. A `needs_validation` finding does **not** block the push gate by itself (treat it as `medium` for verdict unless the underlying severity is critical/high, in which case it blocks as normal).
+The verifier's envelope is captured automatically. Apply its rulings with
+`devsecops-review verify`: it drops findings ruled `drop` (→ `false_positive`,
+reason prefixed `verifier:`), re-rates `adjust` findings, keeps the rest, carries
+verifier questions onto the findings, logs a `finding_verified` event per ruling,
+and prints anything worth your attention.
 
-Log `finding_verified id=<id> verdict=<keep|drop|adjust> severity=<severity_out>`
-for each. You keep final judgement: if the verifier drops something you are sure
-is a real, reachable critical/high, keep it and note the disagreement in the
-report — never let the verifier hide a genuine serious bug. Record any verifier
-`observations` as `info` findings only if they are real; otherwise ignore them.
-Re-sort findings after applying. In `--non-interactive` mode this pass still runs
-(it needs no developer input).
+You keep final judgement:
+- `verify` flags under **"CHECK THESE"** any critical/high finding the verifier dropped or downgraded. If you are sure one is a real, reachable critical/high, restore it: `devsecops-review findings set <id> status=open severity=<level> note="kept despite verifier: <why>"`. Never let the verifier hide a genuine serious bug.
+- A `keep` with `confidence_out: needs_validation` stays open with the exact missing fact; surface it as an open question in interactive mode, or list it under "Open questions" in `--non-interactive` mode. It does **not** block the push gate by itself unless its severity is critical/high (the `report` step treats it that way).
+- Verifier `observations` are not findings — add one with `devsecops-review findings add` only if you confirm it is real.
+
+In `--non-interactive` mode this pass still runs (it needs no developer input).
 
 ## Step 8: questions
 
-Collect every `suspected` finding's questions plus the agents' `questions`.
+`devsecops-review findings list` shows the open findings; the open questions are
+in `collect`'s output and in `findings.json` (`questions[]`).
 
-- Interactive: ask them **before** finalizing those findings. Group them (AskUserQuestion takes up to 4 questions per call; use it when available, otherwise ask in plain text and wait). Phrase them so they stand alone, e.g. "Is `GET /api/export` meant to be reachable without logging in?" Log `question_asked id=<Q> finding=<id>` and, after the answer, `question_answered id=<Q> finding=<id> outcome=<confirmed|dismissed|unclear>`. Apply each answer: dismissed → `false_positive` with the answer as the note; confirmed → raise confidence. If an answer changes the picture for another area, re-dispatch that agent with the answer.
-- Non-interactive: don't ask. Keep the findings `open` and list the questions under "Open questions" in the report.
+- Interactive: ask them **before** finalizing those findings. Group them (AskUserQuestion takes up to 4 questions per call; use it when available, otherwise ask in plain text and wait). Phrase them so they stand alone, e.g. "Is `GET /api/export` meant to be reachable without logging in?" Record each answer with `devsecops-review findings answer <Qid> outcome=<confirmed|dismissed|unclear> note="<their words>"` — it logs the Q&A and updates the linked findings (dismissed → `false_positive`; confirmed → raises confidence). If an answer changes the picture for another area, re-dispatch that agent with the answer and run `collect` again.
+- Non-interactive: don't ask. Leave the findings `open`; `report` lists the questions under "Open questions".
 
 ## Step 9: fix mode
 
-Interactive only. Go through findings from most to least severe. For each, show:
+Interactive only. Go through findings from most to least severe;
+`devsecops-review findings show <id>` prints the full finding (attack, code,
+fix diff, why it works) ready to present. For each, ask: **accept**, **reject**
+(reason: false positive / accepted risk / will fix later, plus a sentence), or
+**edit** (the developer describes the change you should make instead). For
+several low/info findings you may offer one combined question. Then:
 
-```
-[HIGH · likely] AUTH-002 Missing ownership check on order lookup (A01, CWE-639)
-Attack: any logged-in user can read another user's order by changing the id in GET /api/orders/1043.
-Code: src/routes/orders.js:31-36
-<snippet>
-Proposed fix:
-<diff>
-Why it works: <one or two sentences>
-```
-
-Then ask: **accept**, **reject** (reason: false positive / accepted risk / will
-fix later, plus a sentence), or **edit** (the developer describes the change you
-should make instead). For several low/info findings you may offer one combined
-question. Then:
-
-- Accept: apply exactly that change with Edit. Log `finding_accepted id=<id>` and `fix_applied id=<id> file=<path>`.
-- Reject: set the status and the reason. Log `finding_rejected id=<id> reason=<false_positive|accepted_risk|will_fix_later> note="<their sentence>"`.
-- Edit: apply the developer's version after showing the resulting diff once; log as accepted + fix_applied with `edited=true`.
+- Accept: apply exactly that change with Edit, then `devsecops-review findings fixed <id>`.
+- Reject: `devsecops-review findings reject <id> reason=<false_positive|accepted_risk|will_fix_later> note="<their sentence>"`.
+- Edit: apply the developer's version after showing the resulting diff once, then `devsecops-review findings fixed <id> edited=true`.
 
 After all accepted fixes are applied, **re-check the changed code**: re-read
 each fixed region, and for critical/high fixes re-dispatch the agent that found
 it on those files, with the original finding, asking it to confirm the fix and
-look for new problems the fix introduced. Mark verified findings `fixed` and log
-`fix_verified id=<id> result=<ok|still_vulnerable>`. A fix that doesn't hold
-stays `open`; tell the developer and propose a better one.
+look for new problems the fix introduced. If a fix doesn't hold, re-open it
+(`devsecops-review findings set <id> status=open note="fix did not hold: <why>"`),
+tell the developer, and propose a better one. (`findings fixed` already logs the
+accept/apply/verify events.)
 
-## Step 10: verdict
+## Step 10: verdict and report
 
-Read `${CLAUDE_SKILL_DIR}/severity-policy.md` and compute PASS, PASS WITH
-WARNINGS or BLOCKED over the findings **after** the verification pass and fixes.
-If the team config set `blocking-policy block-on`, block on those severities
-instead of the default critical/high. If BLOCKED in interactive mode, show the blocking findings
-and offer exactly two ways forward: fix them now (back to step 9), or override
-with a written reason (as described in the policy). Never override on your own
-and never in non-interactive mode.
+Run `devsecops-review report --block-on <severities>` — `critical,high` by
+default, or the team config's `blocking-policy block-on` list. For any coverage
+gap you found in Step 1c/7 that no agent covered, pass `--gap "<description>"`
+(repeatable). The command, over the findings **after** verification and fixes:
 
-## Step 11: report (write it before the stamp)
+- computes the verdict (PASS / PASS WITH WARNINGS / BLOCKED) per `${CLAUDE_SKILL_DIR}/severity-policy.md`;
+- writes `.security-review/reports/<review_id>.json` and a masked human `.md` report (verdict, counts, change summary, findings table, a section per finding, open questions, scanners, coverage, agents);
+- writes `.security-review/report-result.txt` with `verdict=`, `counts=` and `report=` for the stamp step.
 
-Write two files named after the review id from step 2:
+It prints the verdict, the blocking findings, coverage gaps and the report path.
 
-`.security-review/reports/<review_id>.json`:
+**If BLOCKED in interactive mode**, show the blocking findings and offer exactly
+two ways forward: fix them now (back to Step 9, then re-run `report`), or override
+with a written reason. To override, re-run with the reason:
+`devsecops-review report --block-on <severities> --override-reason "<the developer's sentence, ≥15 chars>"`
+— the verdict becomes `OVERRIDDEN`. Never override on your own, and never in
+`--non-interactive` mode.
 
-```json
-{
-  "review_id": "...", "generated_at": "<ISO time>", "mode": "...", "base_ref": "...", "head": "...",
-  "verdict": "PASS|PASS_WITH_WARNINGS|BLOCKED|OVERRIDDEN", "override_reason": "",
-  "stack": { "languages": [], "frameworks": [] },
-  "scanners": [ { "tool": "...", "status": "ran|not_installed|error|skipped", "findings": 0 } ],
-  "agents": [ { "agent": "...", "files_reviewed": 0, "findings": 0 } ],
-  "coverage_gaps": [],
-  "counts": { "critical": 0, "high": 0, "medium": 0, "low": 0, "info": 0 },
-  "findings": [ "...finding objects with status and resolution_note..." ],
-  "open_questions": [ { "id": "Q1", "finding_ids": [], "question": "..." } ]
-}
-```
+## Step 11: stamp
 
-`counts` covers **unresolved** findings only (not `fixed`/`false_positive`).
-
-`.security-review/reports/<review_id>.md`: a human report with the verdict and
-counts at the top, the change summary from the context map, a findings table
-(id, severity, confidence, category, file:line, status), then one section per
-finding (attack, code, fix diff, why it works, status/note), open questions,
-scanners run and not run (with install commands), and agents run.
-
-## Step 12: stamp
-
-Run:
+Take `verdict=` and `counts=` from `.security-review/report-result.txt` and run:
 
 ```
 devsecops-review finalize --verdict <PASS|PASS_WITH_WARNINGS|BLOCKED> \
   --counts <critical>,<high>,<medium>,<low>,<info> \
-  --report .security-review/reports/<review_id>.md \
+  --report <report path from report-result.txt> \
   [--override-reason "<developer's reason>"]
 ```
 
-It writes `.security-review/stamp.json` (HEAD, timestamp, verdict, diff hash and
-the blob id of every reviewed file) and logs the `verdict` (and
-`block_overridden`) event. The push gate accepts any later commit whose changed
-files match the reviewed content, so the developer can commit after reviewing.
-If it warns about changed files outside the reviewed scope, tell the developer
-they aren't covered.
+(Pass the **original** verdict from `report-result.txt` — `finalize` turns it
+into `OVERRIDDEN` itself when `--override-reason` is given.) It writes
+`.security-review/stamp.json` (HEAD, timestamp, verdict, diff hash and the blob
+id of every reviewed file) and logs the `verdict` (and `block_overridden`) event.
+The push gate accepts any later commit whose changed files match the reviewed
+content, so the developer can commit after reviewing. If it warns about changed
+files outside the reviewed scope, tell the developer they aren't covered.
 
-## Step 13: chat summary
+## Step 12: chat summary
 
 Keep it short:
 
@@ -386,12 +378,15 @@ Report: .security-review/reports/<review_id>.md
 
 ## Logging
 
-Event names: `config_loaded`, `scope_detected`, `stack_detected`, `scanner_result`,
-`finding_reported`, `finding_verified`, `question_asked`, `question_answered`,
-`finding_accepted`, `finding_rejected`, `fix_applied`, `fix_verified`,
-`review_error`. `review_started`
-and `agent_started`/`agent_completed` are logged by the plugin's hooks, and
-`verdict`/`block_overridden` by `finalize`. Pass values as `key=value` (strings)
-or `key:=<json>` (numbers, booleans). Never put code snippets, secrets or
-personal data in log values. If a step fails, log `review_error step=<n>
+Most events are emitted for you now: the `devsecops-review` subcommands log
+`coverage_ledger_updated`, `finding_reported`, `finding_verified`,
+`question_asked`/`question_answered`, `finding_accepted`/`finding_rejected`,
+`fix_applied`/`fix_verified`; the plugin's hooks log `review_started` and
+`agent_started`/`agent_completed`; and `finalize` logs `verdict` (and
+`block_overridden`). You only log the few steps that have no command behind them:
+`config_loaded` (Step 1b), `scope_detected` (Step 2), `stack_detected` (Step 3),
+`scanner_result` (Step 5), and `review_error` on a failure. Pass values as
+`key=value` (strings) or `key:=<json>` (numbers, booleans). Never put code
+snippets, secrets or personal data in log values. If a step fails, log
+`review_error step=<n>
 message="<short>"` and continue when you safely can.

@@ -57,7 +57,7 @@ Apply `needs_validation` when the finding requires knowledge of branch protectio
 
 ## Output
 
-Return the JSON envelope from `${CLAUDE_SKILL_DIR}/finding-schema.md` as the
+Return the JSON envelope from `${CLAUDE_PLUGIN_ROOT}/skills/security-review/finding-schema.md` as the
 **last thing** in your reply. `confidence` values: `confirmed`, `likely`,
 `suspected`, `needs_validation` (use this last one when a hosted-runner, registry,
 signing, or deployment fact is required but not observable in source).

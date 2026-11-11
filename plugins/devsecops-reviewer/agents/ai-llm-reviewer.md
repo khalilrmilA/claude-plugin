@@ -67,7 +67,7 @@ developer.
 
 ## Output
 
-Return the JSON envelope from `${CLAUDE_SKILL_DIR}/finding-schema.md` as the
+Return the JSON envelope from `${CLAUDE_PLUGIN_ROOT}/skills/security-review/finding-schema.md` as the
 **last thing** in your reply. `confidence` values: `confirmed`, `likely`,
 `suspected`, `needs_validation` (use this last one when provider, model,
 renderer, or deployment behavior is required but not observable in source).

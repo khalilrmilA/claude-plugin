@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 # Shared helpers for devsecops-reviewer scripts. Source this file; don't run it.
 # Portable across Linux, macOS (bash 3.2) and Git Bash on Windows. No jq needed.
+#
+# Process creation is slow on Windows (tens of milliseconds per fork), and some
+# of these helpers run on every git command and every log line, so the hot ones
+# avoid subshells: they set a variable instead of printing (the *_to functions).
 
 # shellcheck disable=SC2034  # used by the scripts that source this file
 DSR_SCHEMA_VERSION=1
@@ -10,29 +14,80 @@ DSR_EMPTY_TREE="4b825dc642cb6eb9a060e54bf8d69288fbee4904"
 DSR_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DSR_PLUGIN_ROOT="$(cd "$DSR_LIB_DIR/../.." && pwd)"
 
-dsr_plugin_version() {
-  local manifest="$DSR_PLUGIN_ROOT/.claude-plugin/plugin.json"
-  if [ -f "$manifest" ]; then
-    sed -nE 's/.*"version"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/p' "$manifest" | head -n1
-  else
-    echo "unknown"
+# Read the plugin version from the manifest without spawning a process.
+DSR_PLUGIN_VERSION=""
+dsr_plugin_version_to() { # <var>
+  if [ -z "$DSR_PLUGIN_VERSION" ]; then
+    DSR_PLUGIN_VERSION="unknown"
+    local manifest="$DSR_PLUGIN_ROOT/.claude-plugin/plugin.json" line
+    if [ -f "$manifest" ]; then
+      while IFS= read -r line || [ -n "$line" ]; do
+        case "$line" in
+          *'"version"'*)
+            line=${line#*\"version\"}; line=${line#*\"}; line=${line%%\"*}
+            [ -n "$line" ] && DSR_PLUGIN_VERSION=$line
+            break;;
+        esac
+      done <"$manifest"
+    fi
   fi
+  printf -v "$1" '%s' "$DSR_PLUGIN_VERSION"
 }
+dsr_plugin_version() { local v; dsr_plugin_version_to v; printf '%s\n' "$v"; }
 
-dsr_now_iso() { date -u +%Y-%m-%dT%H:%M:%SZ; }
+# UTC timestamps. bash >= 4.2 can read the epoch with a builtin; the calendar
+# date is then derived arithmetically, because printf's %()T formats in the
+# local time zone and overriding TZ is not honoured on every platform. Older
+# bash calls date.
+dsr_now_iso_to() { # <var>
+  local __e=""
+  if [ -n "${EPOCHSECONDS:-}" ]; then
+    __e=$EPOCHSECONDS
+  elif [ "${BASH_VERSINFO[0]:-3}" -gt 4 ] || { [ "${BASH_VERSINFO[0]:-3}" -eq 4 ] && [ "${BASH_VERSINFO[1]:-0}" -ge 2 ]; }; then
+    printf -v __e '%(%s)T' -1
+  fi
+  case "$__e" in
+    ''|*[!0-9]*) printf -v "$1" '%s' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"; return 0;;
+  esac
+  dsr_epoch_to_iso_to "$1" "$__e"
+}
+# dsr_epoch_to_iso_to <var> <epoch seconds>: civil date from a day count.
+dsr_epoch_to_iso_to() {
+  local __e=$2
+  local __days=$(( __e / 86400 )) __rem=$(( __e % 86400 ))
+  local __z=$(( __days + 719468 ))
+  local __era=$(( __z / 146097 ))
+  local __doe=$(( __z - __era * 146097 ))
+  local __yoe=$(( (__doe - __doe / 1460 + __doe / 36524 - __doe / 146096) / 365 ))
+  local __doy=$(( __doe - (365 * __yoe + __yoe / 4 - __yoe / 100) ))
+  local __mp=$(( (5 * __doy + 2) / 153 ))
+  local __d=$(( __doy - (153 * __mp + 2) / 5 + 1 ))
+  local __m=$(( __mp < 10 ? __mp + 3 : __mp - 9 ))
+  local __y=$(( __yoe + __era * 400 + (__m <= 2 ? 1 : 0) ))
+  printf -v "$1" '%04d-%02d-%02dT%02d:%02d:%02dZ' "$__y" "$__m" "$__d" \
+    $(( __rem / 3600 )) $(( __rem % 3600 / 60 )) $(( __rem % 60 ))
+}
+dsr_now_iso() { local t; dsr_now_iso_to t; printf '%s\n' "$t"; }
 dsr_now_compact() { date -u +%Y%m%dT%H%M%SZ; }
 
-# Escape a string for inclusion inside a JSON string literal.
-dsr_json_escape() {
-  local s=$1
-  s=${s//\\/\\\\}
-  s=${s//\"/\\\"}
-  s=${s//$'\n'/\\n}
-  s=${s//$'\r'/\\r}
-  s=${s//$'\t'/\\t}
-  # Drop remaining control characters rather than emit invalid JSON.
-  printf '%s' "$s" | LC_ALL=C tr -d '\000-\010\013\014\016-\037'
+# dsr_json_escape_to <var> <string>: escape for a JSON string literal, no fork
+# unless the value holds raw control characters (then they are dropped rather
+# than emitting invalid JSON).
+dsr_json_escape_to() {
+  local LC_ALL=C __s=$2
+  __s=${__s//\\/\\\\}
+  __s=${__s//\"/\\\"}
+  __s=${__s//$'\n'/\\n}
+  __s=${__s//$'\r'/\\r}
+  __s=${__s//$'\t'/\\t}
+  case "$__s" in
+    *[$'\001'-$'\010'$'\013'$'\014'$'\016'-$'\037']*)
+      __s=$(printf '%s' "$__s" | tr -d '\000-\010\013\014\016-\037');;
+  esac
+  printf -v "$1" '%s' "$__s"
 }
+# Printing form, for callers outside the hot paths.
+dsr_json_escape() { local __out; dsr_json_escape_to __out "$1"; printf '%s' "$__out"; }
 
 # Print a working python interpreter name, or return 1. Skips the Windows
 # Store "python3" stub, which exists on PATH but can't run code.
@@ -121,6 +176,27 @@ else:
     head -n1 | sed -e 's/\\"/"/g' -e 's/\\\\/\\/g'
 }
 
+# dsr_file_field_to <var> <file> <key>: first string or number value of "key" in
+# a small flat JSON file we wrote ourselves (scope.json, stamp.json). No fork.
+dsr_file_field_to() {
+  local __v="" __line
+  if [ -f "$2" ]; then
+    while IFS= read -r __line || [ -n "$__line" ]; do
+      case "$__line" in
+        *"\"$3\""*)
+          __line=${__line#*\"$3\"}; __line=${__line#*:}
+          __line=${__line#"${__line%%[![:space:]]*}"}
+          case "$__line" in
+            \"*) __line=${__line#\"}; __v=${__line%%\"*};;
+            *) __v=${__line%%[,[:space:]\}]*};;
+          esac
+          break;;
+      esac
+    done <"$2"
+  fi
+  printf -v "$1" '%s' "$__v"
+}
+
 dsr_sha256() {
   if command -v sha256sum >/dev/null 2>&1; then
     sha256sum | awk '{print $1}'
@@ -142,10 +218,21 @@ dsr_state_dir() {
 }
 
 # Remote URL with any embedded credentials removed (https://user:token@host/...).
+dsr_strip_url_credentials_to() { # <var> <url>
+  local __u=$2 __scheme __rest
+  case "$__u" in
+    http://*@*|https://*@*)
+      __scheme=${__u%%://*}; __rest=${__u#*://}
+      # Only strip when the "@" comes before the first "/" (the authority part).
+      case "${__rest%%/*}" in *@*) __u="$__scheme://${__rest#*@}";; esac;;
+  esac
+  printf -v "$1" '%s' "$__u"
+}
 dsr_remote_url() {
   local url
   url=$(git config --get remote.origin.url 2>/dev/null) || { echo ""; return 0; }
-  printf '%s' "$url" | sed -E 's#(https?://)[^/@]*@#\1#'
+  dsr_strip_url_credentials_to url "$url"
+  printf '%s' "$url"
 }
 
 dsr_repo_name() {

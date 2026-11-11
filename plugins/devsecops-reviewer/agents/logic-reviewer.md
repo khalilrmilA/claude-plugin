@@ -69,7 +69,7 @@ field definitions: `${CLAUDE_PLUGIN_ROOT}/skills/security-review/finding-schema.
     {
       "id": "LOGIC-001",
       "title": "...",
-      "category": { "key": "business-logic|race-condition|client-trust|input-validation|authz|other", "owasp": "A04:2021-Insecure Design", "cwe": "CWE-602" },
+      "category": { "key": "business-logic|race-condition|client-trust|input-validation|authz|other", "owasp": "A06:2025-Insecure Design", "cwe": "CWE-602" },
       "severity": "critical|high|medium|low|info",
       "confidence": "confirmed|likely|suspected",
       "file": "path/from/repo/root",
