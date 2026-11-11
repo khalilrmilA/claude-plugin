@@ -1,0 +1,79 @@
+# CI for the devsecops-reviewer plugin itself.
+# A security tool should be at least as tested as the code it reviews.
+
+name: Plugin CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:   # lets you trigger the (API-costing) eval job by hand
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint scripts (fast, no API)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install shellcheck
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
+      - name: shellcheck + bash -n
+        run: |
+          set -e
+          files=$(git ls-files 'plugins/devsecops-reviewer/scripts/*.sh' \
+                               'plugins/devsecops-reviewer/scripts/lib/*.sh' \
+                               'plugins/devsecops-reviewer/bin/devsecops-review' \
+                               'plugins/devsecops-reviewer/git-hooks/pre-push')
+          echo "$files" | xargs -r shellcheck -S warning
+          for f in $files; do bash -n "$f"; done
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+      - name: Python syntax
+        run: python -m py_compile plugins/devsecops-reviewer/scripts/review.py evals/score.py
+      - name: JSON manifests parse
+        run: |
+          python -c "import json,glob; [json.load(open(f)) for f in ['plugins/devsecops-reviewer/.claude-plugin/plugin.json','.claude-plugin/marketplace.json','plugins/devsecops-reviewer/hooks/hooks.json']]; print('manifests ok')"
+
+  validate:
+    name: claude plugin validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install Claude Code
+        run: npm install -g @anthropic-ai/claude-code
+      - name: Validate plugin and marketplace
+        run: |
+          claude plugin validate plugins/devsecops-reviewer --strict
+          claude plugin validate .
+
+  evals:
+    name: Eval suite (manual; needs ANTHROPIC_API_KEY)
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+      - name: Install Claude Code
+        run: npm install -g @anthropic-ai/claude-code
+      - name: Run the scored eval suite
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          cd evals && bash run-evals.sh --model sonnet
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: eval-results
+          path: evals/results/

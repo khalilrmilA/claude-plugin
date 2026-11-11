@@ -5,7 +5,10 @@
   "description": "Pre-push security review of a developer's changes: stack detection, deterministic scanners, specialist reviewer agents, an adversarial verifier, guided fixes, and a push gate that requires a passing review stamp. Findings are merged, de-duplicated and scored by a deterministic engine (OWASP Top 10:2025 + CWE), exported as SARIF for GitHub code scanning, and enforceable in CI.",
   "keywords": ["security", "devsecops", "code-review", "sast", "secrets", "pre-push", "owasp", "sarif", "ci"],
   "author": {
-    "name": "DevSecOps Team"
+    "name": "khalilrmilA",
+    "url": "https://github.com/khalilrmilA"
   },
-  "license": "UNLICENSED"
+  "homepage": "https://github.com/khalilrmilA/claude-plugin",
+  "repository": "https://github.com/khalilrmilA/claude-plugin",
+  "license": "MIT"
 }

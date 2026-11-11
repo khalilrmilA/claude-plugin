@@ -1,8 +1,9 @@
 {
   "name": "devsecops-tools",
-  "description": "Internal security tooling for Claude Code: pre-push security review and push gate.",
+  "description": "Security tooling for Claude Code: pre-push security review, SARIF export and a push gate.",
   "owner": {
-    "name": "DevSecOps Team"
+    "name": "khalilrmilA",
+    "url": "https://github.com/khalilrmilA"
   },
   "plugins": [
     {
